@@ -1,0 +1,56 @@
+{
+  "control_address": "127.0.0.1:19031",
+  "storage": {
+    "directory": "/data/events",
+    "segment_bytes": 4194304,
+    "segments": 16
+  },
+  "sources": [
+    {
+      "id": "camera-a",
+      "enabled": false,
+      "brand": "imou",
+      "host": "192.0.2.10",
+      "native_port": 37777,
+      "account": {
+        "username": "admin",
+        "password_file": "/run/secrets/camera_password"
+      }
+    }
+  ],
+  "cameras": [
+    {
+      "id": "camera-a-lens-1",
+      "enabled": false,
+      "verified": false,
+      "source_id": "camera-a",
+      "source_index": 0,
+      "lens": "channel",
+      "advertised_ip": "198.51.100.210",
+      "recorder_ip": "198.51.100.150",
+      "management_address": "0.0.0.0:18443",
+      "rtsp_address": "0.0.0.0:18554",
+      "main_url": "rtsp://192.0.2.10:554/cam/realmonitor?channel=1&subtype=0",
+      "sub_url": "rtsp://192.0.2.10:554/cam/realmonitor?channel=1&subtype=1",
+      "account": {
+        "username": "nvr_proxy",
+        "password_file": "/run/secrets/virtual_camera_password"
+      },
+      "tls_certificate_file": "/config/tls/virtual-cameras.crt",
+      "tls_key_file": "/config/tls/virtual-cameras.key",
+      "compatibility": {
+        "module_spec_profile": "omada-ipc-observed",
+        "advertise_vhttpd": true,
+        "extended_video_fields": true,
+        "extended_identity": true,
+        "encode_http_strings": true,
+        "in_stream_markers": true,
+        "network": {
+          "netmask": "255.255.255.0",
+          "gateway": "198.51.100.1",
+          "dns": "198.51.100.1"
+        }
+      }
+    }
+  ]
+}

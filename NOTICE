@@ -1,0 +1,23 @@
+Any to Omada is an unofficial DIY open-source project for camera and recorder
+interoperability. It provides a temporary compatibility layer for installations
+where native ONVIF integration does not expose the required functionality.
+
+Any to Omada is not affiliated with, endorsed by, or sponsored by TP-Link,
+Omada, Dahua, Imou, Hikvision, ONVIF, or the other vendors and organizations
+whose products or protocols it supports or discusses.
+
+TP-Link, Omada, Dahua, Imou, Hikvision, ONVIF, Docker, and other product and
+organization names are trademarks or registered trademarks of their respective
+owners. They are referenced only to describe compatibility and integration.
+These references do not claim vendor support or ONVIF certification.
+
+Original project code is distributed under the MIT License in LICENSE.
+Third-party code and dependencies retain their own licenses and copyright
+notices. THIRD_PARTY_NOTICES contains the notices for the runtime Go modules
+and Go runtime/standard-library code. The SPAKE2+ Elligator Edition
+implementation retains
+the attributions and license terms in internal/spakeee/NOTICE, and its
+cryptographic dependencies are documented in
+internal/spakeee/DEPENDENCY_NOTICES.
+
+See docs/legal.md for project scope and licensing details.

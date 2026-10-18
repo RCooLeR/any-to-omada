@@ -1,0 +1,50 @@
+name: Verify
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  translator:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      GOTOOLCHAIN: local
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - run: go mod verify
+      - run: test -z "$(gofmt -l cmd internal)"
+      - run: go vet ./...
+      - run: go test -race ./...
+      - run: go run ./cmd/any-to-omada check --config config.example.json
+      - run: go build -o "$RUNNER_TEMP/any-to-omada" ./cmd/any-to-omada
+
+  routing:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+      - name: Check shell syntax
+        run: |
+          sh -n deploy/mango/camera-aliases.sh
+          sh -n deploy/mango/camera-forwarding.sh
+          sh -n deploy/mango/camera-routed-forwarding.sh
+      - name: Verify routing transactions with local fakes
+        run: python -m unittest discover -s deploy/mango/tests -p 'test_*.py'
