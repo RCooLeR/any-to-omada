@@ -5,6 +5,7 @@ go 1.27.2
 require (
 	filippo.io/edwards25519 v1.2.0
 	github.com/bluenviron/gortsplib/v5 v5.6.7
+	github.com/bluenviron/mediacommon/v2 v2.9.6
 	github.com/dchest/blake2b v1.0.0
 	github.com/pion/rtp v1.10.5
 	golang.org/x/crypto v0.57.0
@@ -12,7 +13,6 @@ require (
 )
 
 require (
-	github.com/bluenviron/mediacommon/v2 v2.9.6 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/pion/logging v0.2.4 // indirect

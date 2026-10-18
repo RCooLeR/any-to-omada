@@ -28,6 +28,10 @@ import (
 	"github.com/RCooLeR/any-to-omada/internal/spakeee"
 )
 
+func readHandshakeMessage(reader *bufio.Reader, contentType ContentType, step, minBytes, maxBytes int) ([]byte, error) {
+	return readHandshakeMessageTracked(reader, contentType, step, minBytes, maxBytes, &handshakeProgress{})
+}
+
 type syntheticPAKE struct {
 	keys      spakeee.Keys
 	finishErr error

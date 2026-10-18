@@ -221,10 +221,6 @@ func validAuthCode(value string) bool {
 	return true
 }
 
-func readHandshakeMessage(reader *bufio.Reader, contentType ContentType, step, minBytes, maxBytes int) ([]byte, error) {
-	return readHandshakeMessageTracked(reader, contentType, step, minBytes, maxBytes, &handshakeProgress{})
-}
-
 func readHandshakeMessageTracked(reader *bufio.Reader, contentType ContentType, step, minBytes, maxBytes int, progress *handshakeProgress) ([]byte, error) {
 	progress.details.Reason = "frame_read"
 	progress.details.PeerStepPresent, progress.details.PeerErrorCodePresent = false, false

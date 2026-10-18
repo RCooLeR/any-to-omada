@@ -426,9 +426,11 @@ func TestRejectedAuthenticationDoesNotRetryOrSendRPC(t *testing.T) {
 	awaitServer(t, server)
 }
 
+var errSinkExhausted = errors.New("test sink exhausted")
+
 type exhaustedSink struct{}
 
-func (exhaustedSink) Write(string, string, string, any) error { return capture.ErrLimit }
+func (exhaustedSink) Write(string, string, string, any) error { return errSinkExhausted }
 
 func TestSinkFailureStopsFurtherReadsAndLogsOut(t *testing.T) {
 	device, server := startFake(t, func(p fakePeer) error {
@@ -448,7 +450,7 @@ func TestSinkFailureStopsFurtherReadsAndLogsOut(t *testing.T) {
 		}
 		return p.reply(request, nil, "")
 	})
-	if err := Run(context.Background(), device, exhaustedSink{}); !errors.Is(err, capture.ErrLimit) {
+	if err := Run(context.Background(), device, exhaustedSink{}); !errors.Is(err, errSinkExhausted) {
 		t.Fatalf("expected sink error, got %v", err)
 	}
 	awaitServer(t, server)

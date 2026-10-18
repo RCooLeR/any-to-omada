@@ -1,42 +1,18 @@
 // Package capture defines the shared adapter and structured-log contracts.
 package capture
 
-import (
-	"errors"
-	"net"
-	"net/url"
-	"strconv"
-)
+import "errors"
 
+// ErrAuthentication means the source camera rejected the adapter's credentials.
 var ErrAuthentication = errors.New("camera authentication rejected")
-var ErrLimit = errors.New("capture storage limit reached")
 
+// Device identifies one source endpoint and its in-memory credentials.
 type Device struct {
-	ID          string `json:"id"`
-	Host        string `json:"host"`
-	Brand       string `json:"brand"`
-	Username    string `json:"-"`
-	Password    string `json:"-"`
-	HTTPPort    int    `json:"http_port"`
-	NativePort  int    `json:"native_port"`
-	ONVIFPath   string `json:"onvif_path"`
-	Scheme      string `json:"scheme"`
-	InsecureTLS bool   `json:"insecure_tls"`
-}
-
-func (d Device) Origin() string {
-	scheme := d.Scheme
-	if scheme == "" {
-		scheme = "http"
-	}
-	port := d.HTTPPort
-	if port == 0 {
-		port = 80
-		if scheme == "https" {
-			port = 443
-		}
-	}
-	return (&url.URL{Scheme: scheme, Host: net.JoinHostPort(d.Host, strconv.Itoa(port))}).String()
+	ID         string `json:"id"`
+	Host       string `json:"host"`
+	Username   string `json:"-"`
+	Password   string `json:"-"`
+	NativePort int    `json:"native_port"`
 }
 
 // Sink receives semantic payloads; its implementation redacts secrets centrally.

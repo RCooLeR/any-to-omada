@@ -30,7 +30,6 @@ const (
 	DevicePath      = "/onvif/device_service"
 	DeviceNamespace = "http://www.onvif.org/ver10/device/wsdl"
 	MediaNamespace  = "http://www.onvif.org/ver10/media/wsdl"
-	PTZNamespace    = "http://www.onvif.org/ver20/ptz/wsdl"
 	EventsNamespace = "http://www.onvif.org/ver10/events/wsdl"
 	NotifyNamespace = "http://docs.oasis-open.org/wsn/b-2"
 	SOAPNamespace   = "http://www.w3.org/2003/05/soap-envelope"

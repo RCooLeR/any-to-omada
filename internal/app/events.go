@@ -59,7 +59,7 @@ type routedEvent struct {
 }
 
 func newSource(cfg config.Source, password string, cameras []config.Camera, store capture.Sink, cancel context.CancelCauseFunc) *source {
-	s := &source{cfg: cfg, device: capture.Device{ID: cfg.ID, Host: cfg.Host, Brand: cfg.Brand, NativePort: cfg.NativePort, Username: cfg.Account.Username, Password: password}, store: store, cancel: cancel, routes: map[int]string{}, status: sourceStatus{ID: cfg.ID, State: "disabled", LensEdges: map[string]uint64{}}}
+	s := &source{cfg: cfg, device: capture.Device{ID: cfg.ID, Host: cfg.Host, NativePort: cfg.NativePort, Username: cfg.Account.Username, Password: password}, store: store, cancel: cancel, routes: map[int]string{}, status: sourceStatus{ID: cfg.ID, State: "disabled", LensEdges: map[string]uint64{}}}
 	if cfg.Enabled {
 		s.status.State = "starting"
 	}

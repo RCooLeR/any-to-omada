@@ -34,7 +34,8 @@ LABEL org.opencontainers.image.title="Any to Omada" \
     org.opencontainers.image.source="https://github.com/RCooLeR/any-to-omada" \
     org.opencontainers.image.licenses="MIT"
 USER 10001:10001
-EXPOSE 18443 18444 18445 18446 18447 18448 18554 18555 18556 18557 18558 18559
+# Default example listeners; publish additional configured pairs as needed.
+EXPOSE 18443 18554
 STOPSIGNAL SIGTERM
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD ["/any-to-omada", "healthcheck", "--config", "/config/config.json"]
