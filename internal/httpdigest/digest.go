@@ -1,6 +1,5 @@
 // Package httpdigest answers HTTP Digest (RFC 7616) challenges for camera
-// clients. It is any-to-omada's own copy of the OmadaNvrBridge ONVIF Digest
-// client, generalized to any method and request URI; the modules stay independent.
+// clients using the supplied request method and URI.
 package httpdigest
 
 import (

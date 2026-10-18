@@ -1,6 +1,6 @@
 # NAS and container deployment
 
-The repository is a standalone build context. Its Docker image contains one static Go executable and license notices. It does not depend on the NVR bridge, Home Assistant, a database server or FFmpeg.
+The repository is a standalone build context. Its Docker image contains one static Go executable and license notices.
 
 ## Runtime layout
 
@@ -88,4 +88,4 @@ See [six endpoints from four physical cameras](all-six.md) and [adding another s
 
 `/healthz` is liveness; `/readyz` means at least one callback authenticated, not that every camera is working. A callback acknowledgement is not evidence of saved recorder history. Useful diagnostics are the startup version, `camera RTSP profile ready`/`disconnected` messages and callback failure stages. Never share raw authentication exchanges.
 
-Physical controls are opt-in and need independent verification. Default examples keep them disabled; native preset negotiation remains a known compatibility risk. See the [main README](../../README.md#physical-controls).
+Physical controls are opt-in and need independent verification. Default examples keep them disabled; native preset negotiation remains a known compatibility risk. See the [physical controls guide](../../docs/controls.md).

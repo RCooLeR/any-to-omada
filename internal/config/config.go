@@ -150,7 +150,7 @@ type Storage struct {
 	Segments     int    `json:"segments"`
 }
 
-// Config is independent of the NVR bridge and research collector.
+// Config defines the service inventory and settings.
 type Config struct {
 	ControlAddress string   `json:"control_address"`
 	Storage        Storage  `json:"storage"`

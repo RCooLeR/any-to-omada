@@ -26,7 +26,7 @@ import (
 	"github.com/RCooLeR/any-to-omada/internal/tpmarker"
 )
 
-// Version is the standalone service version, separate from OmadaNvrBridge.
+// Version is the service version.
 const Version = "0.3.0"
 
 type camera struct {

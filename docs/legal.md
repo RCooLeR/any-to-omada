@@ -18,8 +18,9 @@ a delivery date.
 
 Compatibility depends on the camera model, firmware, recorder, protocol, and
 configuration. A supported protocol or brand name does not establish support
-for every device or event type. The [README](../README.md) documents implemented
-features, test evidence, and known limits. The project is not an availability
+for every device or event type. The [getting started guide](getting-started.md)
+documents supported features and evidence; the [events](events.md) and
+[physical controls](controls.md) guides explain their limits. The project is not an availability
 guarantee or a substitute for vendor-supported recording and alarm systems.
 
 ## Independent project

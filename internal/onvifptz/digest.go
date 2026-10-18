@@ -9,9 +9,8 @@ import (
 	"strings"
 )
 
-// This file is any-to-omada's own copy of the OmadaNvrBridge ONVIF Digest
-// client; the modules stay independent. The request URI is a parameter here
-// because a camera serves PTZ and media on separate service paths.
+// The request URI is a parameter because a camera serves PTZ and media on
+// separate service paths.
 
 type digestChallenge struct {
 	realm, nonce, algorithm, qop, opaque string
