@@ -57,11 +57,12 @@ type sourceControlGate struct {
 // cameraControls binds explicitly configured physical control clients to one virtual lens
 // and its shared source admission gate.
 type cameraControls struct {
-	cfg   config.Camera
-	ptz   ptzControl
-	light lightControl
-	relay relayControl
-	gate  *sourceControlGate
+	cfg     config.Camera
+	ptz     ptzControl
+	light   lightControl
+	relay   relayControl
+	outputs *cameraOutputs
+	gate    *sourceControlGate
 }
 
 // prepareControls wires only opt-in source clients without contacting the camera; output
@@ -72,13 +73,34 @@ func prepareControls(cam *camera, source config.Source, password string, gate *s
 		control.ptz = cam.ptz
 	}
 	if cam.cfg.WhiteLight != nil {
-		control.light = dvripcapture.NewLighting(capture.Device{ID: source.ID, Host: source.Host, NativePort: source.NativePort, Username: source.Account.Username, Password: password})
+		light := dvripcapture.NewLighting(capture.Device{ID: source.ID, Host: source.Host, NativePort: source.NativePort, Username: source.Account.Username, Password: password})
+		control.light = light
+		if len(cam.cfg.WhiteLight.RecorderModes) > 0 {
+			control.light = manualLightControl{light}
+		}
 	}
 	if output := cam.cfg.AlarmOutput; output != nil {
 		cam.relay = onvifoutput.New(source.Host, output.ONVIFPort, source.Account.Username, password, output.RelayToken)
 		control.relay = cam.relay
 	}
+	if cam.deterrence != nil {
+		control.outputs = &cameraOutputs{cfg: cam.cfg.Deterrence, alarm: cam.deterrence, gate: gate}
+	}
 	return control
+}
+
+// manualLightControl uses the same capability-gated source bank and restoration
+// contract for loopback tests as persistent recorder illumination settings.
+type manualLightControl struct{ light *dvripcapture.Lighting }
+
+// Available checks the actual lamp bank and fixed active profile without writes.
+func (c manualLightControl) Available(ctx context.Context, channel, profile int) error {
+	return c.light.ManualAvailable(ctx, channel, profile)
+}
+
+// Pulse temporarily applies manual white illumination and restores its lease.
+func (c manualLightControl) Pulse(ctx context.Context, channel, profile, brightness int, duration time.Duration) error {
+	return c.light.ManualPulse(ctx, channel, profile, brightness, duration)
 }
 
 // registerControls adds loopback operator endpoints and returns a shutdown barrier that
@@ -119,7 +141,8 @@ func registerControls(mux *http.ServeMux, controls map[string]*cameraControls) f
 			// GET is passive: probing is explicit so ordinary status polling
 			// cannot repeatedly authenticate to camera control services.
 			writeJSON(w, http.StatusOK, map[string]any{"ptz_configured": control.ptz != nil, "white_light_configured": control.light != nil,
-				"alarm_output_configured": control.relay != nil, "hardware_verified": false, "nvr_ui_controls": "unverified"})
+				"alarm_output_configured": control.relay != nil, "sound_alarm_configured": control.outputs.Capabilities().SoundAlarm,
+				"light_alarm_configured": control.outputs.Capabilities().LightAlarm, "hardware_verified": false, "nvr_ui_controls": "configured_controls_only"})
 			return
 		}
 		control.handle(w, r)
@@ -166,6 +189,10 @@ func (c *cameraControls) handle(w http.ResponseWriter, r *http.Request) {
 		}
 		c.ptz.Stop()
 		writeJSON(w, http.StatusAccepted, map[string]any{"state": "stop_queued"})
+		return
+	}
+	if request.Command == "sound_alarm_start" || request.Command == "light_alarm_start" || request.Command == "deterrence_start" || request.Command == "deterrence_stop" {
+		c.handleAlarm(w, r, request.Command)
 		return
 	}
 	select {
@@ -231,13 +258,17 @@ func controlResult(w http.ResponseWriter, err error) {
 		return
 	}
 	response := map[string]any{}
+	if errors.Is(err, errSourceControlBusy) || errors.Is(err, dvripcapture.ErrDeterrenceBusy) {
+		writeJSON(w, http.StatusConflict, map[string]any{"error": "source_control_busy"})
+		return
+	}
 	var lighting *dvripcapture.LightingError
 	if errors.As(err, &lighting) {
 		// This type contains fixed operation/stage labels and an optional
 		// numeric device code only; never return arbitrary upstream errors.
 		response["diagnostic"] = lighting
 	}
-	if !errors.Is(err, dvripcapture.ErrLightingRestore) && (errors.Is(err, errControlUnsupported) || errors.Is(err, dvripcapture.ErrLightingUnsupported) || errors.Is(err, onvifoutput.ErrUnsupported)) {
+	if !errors.Is(err, dvripcapture.ErrLightingRestore) && !errors.Is(err, dvripcapture.ErrDeterrenceStop) && (errors.Is(err, errControlUnsupported) || errors.Is(err, dvripcapture.ErrLightingUnsupported) || errors.Is(err, onvifoutput.ErrUnsupported) || errors.Is(err, dvripcapture.ErrDeterrenceUnsupported)) {
 		response["error"] = "control_unavailable"
 		writeJSON(w, http.StatusNotImplemented, response)
 		return
@@ -247,6 +278,9 @@ func controlResult(w http.ResponseWriter, err error) {
 	response["error"], response["final_state"] = "source_control_failed", "unconfirmed"
 	if errors.Is(err, dvripcapture.ErrLightingRestore) {
 		response["restoration_failed"] = true
+	}
+	if errors.Is(err, dvripcapture.ErrDeterrenceStop) {
+		response["stop_unconfirmed"] = true
 	}
 	writeJSON(w, http.StatusBadGateway, response)
 }
@@ -279,5 +313,26 @@ func (r controlRequest) valid() bool {
 	if r.Command == "white_light_pulse" {
 		return r.DurationMS != nil && *r.DurationMS >= 100 && *r.DurationMS <= 5000
 	}
-	return r.DurationMS == nil && (r.Command == "ptz_stop" || r.Command == "white_light_probe" || r.Command == "alarm_probe" || r.Command == "alarm_pulse")
+	return r.DurationMS == nil && (r.Command == "ptz_stop" || r.Command == "white_light_probe" || r.Command == "alarm_probe" || r.Command == "alarm_pulse" ||
+		r.Command == "sound_alarm_start" || r.Command == "light_alarm_start" || r.Command == "deterrence_start" || r.Command == "deterrence_stop")
+}
+
+// handleAlarm shares the authenticated recorder's bounded native alarm path.
+// Successful starts report source acknowledgement, not measured physical state.
+func (c *cameraControls) handleAlarm(w http.ResponseWriter, r *http.Request, command string) {
+	ctx, cancel := context.WithTimeout(r.Context(), 4*time.Second)
+	defer cancel()
+	if command == "deterrence_stop" {
+		controlResult(w, c.outputs.StopAlarm(ctx))
+		return
+	}
+	capability := c.outputs.Capabilities()
+	sound := command == "sound_alarm_start" || (command == "deterrence_start" && capability.SoundAlarm)
+	light := command == "light_alarm_start" || (command == "deterrence_start" && capability.LightAlarm)
+	seconds, err := c.outputs.StartAlarm(ctx, sound, light)
+	if err != nil {
+		controlResult(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"state": "source_acknowledged", "timer": seconds})
 }

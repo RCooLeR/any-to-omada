@@ -40,9 +40,9 @@ reproduced; placeholders are written `<like this>`.
 
 | Direction | Port | Purpose | Label |
 | --- | --- | --- | --- |
-| recorder → camera | TCP 443 | HTTPS management API, one TCP connection per request | observed |
-| recorder → camera | TCP 554 | RTSP over TCP, one session each for main and sub stream | observed |
-| camera → recorder | TCP 6000 | native callback: PAKE, TLS, declarations, passthrough requests, heartbeats, alarms | observed |
+| recorder в†’ camera | TCP 443 | HTTPS management API, one TCP connection per request | observed |
+| recorder в†’ camera | TCP 554 | RTSP over TCP, one session each for main and sub stream | observed |
+| camera в†’ recorder | TCP 6000 | native callback: PAKE, TLS, declarations, passthrough requests, heartbeats, alarms | observed |
 | camera | 2020, 8800, 8443 | ONVIF, vhttpd, vhttpsd: advertised in CET and UPnP answers; the recorder opened none of them | observed |
 | camera | 80, 1025 | HTTP and an unknown service; 1025 did not answer, 80 was not relayed | unverified |
 
@@ -55,8 +55,8 @@ Clean enrollment of the real camera (2026-10-16 08:43 UTC; offsets from the
 first request; observed):
 
 1. `+0.0 s` HTTPS anonymous `get_rtsp_info` (stream discovery).
-2. `+0.2 s` HTTPS callback registration without a session → 401 challenge;
-   login; registration repeated with the session → success.
+2. `+0.2 s` HTTPS callback registration without a session в†’ 401 challenge;
+   login; registration repeated with the session в†’ success.
 3. `+1.5 s` to `+2.8 s` HTTPS reads: `function.module_spec`,
    `network.wan_status`, `video` main and minor, `device_info`,
    `upnpc.upnp_status`, `cet` rtsp and vhttpd.
@@ -85,7 +85,7 @@ After enrollment (observed):
 - The recorder sends `do video.force_iframe` for main and minor right after
   PLAY and after each motion alarm start.
 
-## 3. HTTPS management API (recorder → camera, port 443)
+## 3. HTTPS management API (recorder в†’ camera, port 443)
 
 ### 3.1 Transport (observed)
 
@@ -106,7 +106,7 @@ After enrollment (observed):
 
 ### 3.2 Envelope and error codes
 
-A request is `{"method": "do"|"get"|"set", "<module>": {…}}`: one module for
+A request is `{"method": "do"|"get"|"set", "<module>": {вЂ¦}}`: one module for
 `do` and `set`, one or more for `get`. Every response carries an integer
 `error_code`.
 
@@ -129,7 +129,7 @@ or returned for any unauthenticated request (observed):
 
 ```json
 {"data":{"code":-40407,"encrypt_type":["1","2"],"key":"<RSA public key>","key_2":"<RSA public key>",
-         "nonce":"<hex>","passwdType":"<…>","dac":{"mac":"<camera MAC>","cn":"Omada 8MP Turret(UN)"},
+         "nonce":"<hex>","passwdType":"<вЂ¦>","dac":{"mac":"<camera MAC>","cn":"Omada 8MP Turret(UN)"},
          "pakeCipher":{"cipherSuites":[1],"encryptType":[1]},"secVersion":"1.0"},
  "error_code":-40401,"device_type":"SECUR.CONSUMER.IPC"}
 ```
@@ -149,7 +149,7 @@ offers only `encrypt_type ["1"]`, `passwdType "md5"`, `nonce` and
 
 ### 3.4 Stream discovery and callback registration
 
-`{"method":"do","get_rtsp_info":{}}` → `{"stream_num":0,"ip_src_num":0,"error_code":0}`.
+`{"method":"do","get_rtsp_info":{}}` в†’ `{"stream_num":0,"ip_src_num":0,"error_code":0}`.
 The numbers count active RTSP sessions and distinct client addresses, not
 profiles: the same camera answered `0/0` when idle and `0/1` while another
 channel streamed it (observed, firmware).
@@ -167,7 +167,7 @@ fresh secret per registration and serves as the PAKE password (section 4.2).
 ### 3.5 Reads (`method: get`)
 
 Each module takes a selector `{"name": "<section>" | [names], "table": "<table>" | [tables], "version": "1"}`.
-Detection modules carry `version`. The answer nests module → section → leaves.
+Detection modules carry `version`. The answer nests module в†’ section в†’ leaves.
 A requested section the camera lacks is left out without an error, for example
 `video_capability.capability` (observed).
 
@@ -231,7 +231,7 @@ over the callback (section 4.5).
   `polygon_region_info`, `region_info`.
   - `motion_det`: `enabled`, `sensitivity "medium"`, `digital_sensitivity 50`,
     `people_enabled`, `vehicle_enabled`, `pet_enabled`, `non_vehicle_enabled`,
-    `target_validity`, `obj_filter_enabled`, target size bounds (0–10000),
+    `target_validity`, `obj_filter_enabled`, target size bounds (0вЂ“10000),
     `mb_enabled`.
   - `arming_schedule`: one leaf per weekday holding a JSON array of
     `HHMM-HHMM` ranges inside a string, for example `"[\"0000-2400\"]"`.
@@ -240,9 +240,9 @@ over the callback (section 4.5).
     `AO1_enabled`, `ftp_enabled`, `capture_enabled`, `email_enabled`,
     `target_track_enabled`, `report_server_enabled`.
   - `feature`: `{"max_points_num":"16"}`.
-  - Region rows are keyed `<table>_1`, `<table>_2`… and hold `points_num`,
+  - Region rows are keyed `<table>_1`, `<table>_2`вЂ¦ and hold `points_num`,
     `points_x[]`, `points_y[]` (polygon) or `x_coor`, `y_coor`, `width`,
-    `height` (rectangle) on a 0–10000 grid.
+    `height` (rectangle) on a 0вЂ“10000 grid.
 - `tamper_detection`: `tamper_det {"enabled","sensitivity","digital_sensitivity":"50"}`
   and a notify list like motion's without `target_track_enabled`.
 - `intrusion_detection` (version 1): `detection {"enabled":"on"}`, a notify
@@ -285,7 +285,7 @@ Observed from the recorder, mostly over the callback; the real camera answers
 - `do system.set_time`: `source_time_priority "NVR_NTP"`, `source_mac`,
   `transmit 0`, `T1_timestramp` to `T3_timestramp` with microsecond companions
   (the firmware spells "timestramp"). The camera corrects its clock by
-  `(T2 + T3 − T1 − T4) / 2`, where T4 is its own receive time (firmware).
+  `(T2 + T3 в€’ T1 в€’ T4) / 2`, where T4 is its own receive time (firmware).
 - `set` anti-flicker and sensor rate together:
   `{"image":{"switch":{"flicker":"50hz"}},"video":{"common":{"sensor_framerate":"25"}}}`
   (`60hz` and `30` are the alternatives), before the first RTSP connection.
@@ -294,11 +294,11 @@ Observed from the recorder, mostly over the callback; the real camera answers
 - `set protocol.wan` (static), `do system.nvr_upgrade {"is_upgrade":0}`.
 - Detection settings pushed from the recorder's own configuration:
   `set intrusion_detection` `notify_list`, `arming_schedule`, `detection`;
-  `do intrusion_detection.add_polygon_regions {"polygon_region_info":[{"id":1,"points_x":[…],"points_y":[…],"points_num":"4",…,"people_enabled":"on",…}]}`;
+  `do intrusion_detection.add_polygon_regions {"polygon_region_info":[{"id":1,"points_x":[вЂ¦],"points_y":[вЂ¦],"points_num":"4",вЂ¦,"people_enabled":"on",вЂ¦}]}`;
   `set tamper_detection.tamper_det`. Numeric leaves arrive as strings in writes.
-- `set marker_box.detection {"enabled":…}` when the operator toggles smart frame.
+- `set marker_box.detection {"enabled":вЂ¦}` when the operator toggles smart frame.
 
-## 4. Native callback (camera → recorder, port 6000)
+## 4. Native callback (camera в†’ recorder, port 6000)
 
 ### 4.1 Pre-TLS framing (observed, firmware)
 
@@ -318,13 +318,13 @@ space. Frames stay under 64 KiB; up to four leading CRLF pairs are tolerated.
 
 | Step | Direction | Content-Type | Payload before base64 |
 | --- | --- | --- | --- |
-| 1 | recorder → camera | `ALG_Ver` | version offer, 1–64 bytes; the camera ignores its value |
-| 2 | camera → recorder | `ALG_Ver` | `1.0` |
-| 3 | recorder → camera | `Spake2` | 36 bytes of PAKE public data |
-| 4 | camera → recorder | `Spake2` | 32-byte client share |
-| 5 | recorder → camera | `Spake2` | 64-byte server proof |
-| 6 | camera → recorder | `Spake2` | 32-byte client confirmation |
-| 7 | recorder → camera | `Spake2` | the recorder's certificate chain (≤ 10 KiB), AES-encrypted with the PAKE session keys |
+| 1 | recorder в†’ camera | `ALG_Ver` | version offer, 1вЂ“64 bytes; the camera ignores its value |
+| 2 | camera в†’ recorder | `ALG_Ver` | `1.0` |
+| 3 | recorder в†’ camera | `Spake2` | 36 bytes of PAKE public data |
+| 4 | camera в†’ recorder | `Spake2` | 32-byte client share |
+| 5 | recorder в†’ camera | `Spake2` | 64-byte server proof |
+| 6 | camera в†’ recorder | `Spake2` | 32-byte client confirmation |
+| 7 | recorder в†’ camera | `Spake2` | the recorder's certificate chain (в‰¤ 10 KiB), AES-encrypted with the PAKE session keys |
 
 The PAKE is SPAKE2+ Elligator Edition as in libsodium's `crypto_spake`, with
 the registration `auth_code` as password and the identities `VIGI-IPC`
@@ -371,7 +371,7 @@ The camera answers the recorder's first `Request` with an account challenge:
 The recorder replies with an `Auth` frame holding `algorithm "digestmd5"`,
 `cnonce`, `max_time`, `nc`, `nonce`, `qop "auth"`, `realm "vigi"`, `response`,
 `time`, `uri "tplink"`, `username`, then repeats its request. The camera
-confirms with `{"id":…,"error_code":0,"responseData":{"username","realm":"vigi","uri":"tplink","respauth","qop":"auth","nc","cnonce"}}`.
+confirms with `{"id":вЂ¦,"error_code":0,"responseData":{"username","realm":"vigi","uri":"tplink","respauth","qop":"auth","nc","cnonce"}}`.
 
 `HA1 = MD5(username ":vigi:" T(password))`, where T is the firmware's legacy
 XOR lookup transform of the password (different from the HTTPS login proof).
@@ -439,7 +439,7 @@ With motion detection disabled, the real camera still sends motion (2) and
 human-motion (32) stops but never their starts. Human intrusion (34) comes as a
 start and stop pair (observed over three hours).
 
-## 5. RTSP media (recorder → camera, port 554)
+## 5. RTSP media (recorder в†’ camera, port 554)
 
 - Paths `rtsp://<camera>:554/stream1` (main) and `/stream2` (sub); user agent
   `TP RTSP Client`. Per stream: `OPTIONS`, `DESCRIBE` (401, then with Digest
@@ -454,9 +454,9 @@ start and stop pair (observed over three hours).
   `Transport: RTP/AVP/TCP;unicast;interleaved=0-1;encrypt=1;encryptVersion=1;keyVersion=1;smart_pkg_ver=2`
   (channels `2-3` for audio, `240-241` for the third track). The camera
   answers video and audio with
-  `…;salt=<…>;client_ssrc=<n>;encrypt=0;encryptVersion=1;keyVersion=1`, which
+  `вЂ¦;salt=<вЂ¦>;client_ssrc=<n>;encrypt=0;encryptVersion=1;keyVersion=1`, which
   selects unencrypted RTP, and the third track with `encrypt=1` (observed).
-- PLAY targets the Content-Base URL (`…/streamN/`) with `Range: npt=0.000-`,
+- PLAY targets the Content-Base URL (`вЂ¦/streamN/`) with `Range: npt=0.000-`,
   `Session` and `Authorization`. The Digest `uri` names the stream URL
   without the trailing slash, so a server that insists on the exact request
   URL rejects the PLAY with 401 and the recorder retries every 6 s (observed
@@ -494,11 +494,11 @@ H.265 NAL or a 25-byte H.264 NAL (91 % of frames in the capture).
 
 | Record | Layout | Meaning |
 | --- | --- | --- |
-| `01` | x1 y1 x2 y2, big-endian 16-bit, 0–10000 grid | motion box |
+| `01` | x1 y1 x2 y2, big-endian 16-bit, 0вЂ“10000 grid | motion box |
 | `04` | same | human box |
 | `e0` | `f1 01 f1 01 f0 00 f0 00` | rule alert: intrusion target active (bitmap 1), intrusion region active (bitmap 1), line-crossing target and region inactive; parsed this way by the vendor web player |
 | `07` | `0a 02 01 01 09 00 ff ff` | always next to a rule alert; fields not decoded |
-| `11` | three records `11 04 …`, `11 08 …`, `11 1c …` | sent about every 2 s; probably the rule region outline for the player |
+| `11` | three records `11 04 вЂ¦`, `11 08 вЂ¦`, `11 1c вЂ¦` | sent about every 2 s; probably the rule region outline for the player |
 
 Example alert frame: header `01 02 04 10`, then a human box
 `04 0919 1147 0f17 2710`, a motion box, the `e0` alert and the `07` record.
@@ -514,8 +514,8 @@ units when it stores events is not known (section 8.3).
   offers `encrypt_type "2"` with RSA keys (double percent-encoded) and a
   nonce. Login:
   `{"method":"do","login":{"encrypt_type":"2","passwdType":"sha256","password":"<base64 RSA-PKCS#1(SHA256(password) ":" nonce)>","username":"admin","keyType":"1"}}`
-  → `stok`. Logout: `{"method":"do","system":{"logout":"null"}}`.
-- Channels: `{"method":"get","chm":{"table":["added_dev"]}}` → rows keyed by
+  в†’ `stok`. Logout: `{"method":"do","system":{"logout":"null"}}`.
+- Channels: `{"method":"get","chm":{"table":["added_dev"]}}` в†’ rows keyed by
   channel id with `id`, `ip`, `port`, `online "0"/"1"`, `conn_status` (`"0"`
   streaming; `"1"` and `"2"` seen while no streams could start), `auth_result`,
   `stream_list` (`["main","minor"]` once streams exist), `connect_prot`
@@ -554,11 +554,11 @@ the panel's bit is set (UI).
 The recorder keeps its own per-channel copy, with 1-based channel numbers:
 
 - `{"method":"get","intrusion_detection":{"name":["chn<N>_detection","chn<N>_notif_list"]}}`
-  → `{"enabled":"on","support_filter_enabled":"1"}` and a recorder-side
+  в†’ `{"enabled":"on","support_filter_enabled":"1"}` and a recorder-side
   notification list (`screenwarn_enabled`, `screenshot_enabled`,
   `nvr_msg_push_enabled`, `buzzer_enabled`, `popupwin_enabled`, `record_union`
   and other linkage arrays as percent-encoded JSON strings).
-- `name "chn<N>_alarm_setting"` → the weekly schedule; `name "chn<N>_feature"`.
+- `name "chn<N>_alarm_setting"` в†’ the weekly schedule; `name "chn<N>_feature"`.
 - Regions: `{"method":"do","intrusion_detection":{"chn_get_id_polygon_regions":{"channel":N}}}`
   and `chn_get_id_regions`. Short names used by the UI: `md` motion,
   `id` intrusion, `ld` line crossing, `pd` people, `vd` vehicle, `pt` pet,
@@ -569,7 +569,7 @@ The recorder keeps its own per-channel copy, with 1-based channel numbers:
   `chn<N>_tamper_notif_list`. `_nvr` module variants exist for detection done
   by the recorder itself.
 - `{"method":"do","chm":{"chm_get_all_channel_smart_detection":{"channel":"all","event_type":"intrusion_detection"}}}`
-  → `{"enabled":"1001000…"}`, one character per channel; the UI shows a smart
+  в†’ `{"enabled":"1001000вЂ¦"}`, one character per channel; the UI shows a smart
   event page for a channel only when its character is `1`.
 
 The recorder takes these values from the camera: after the virtual camera
@@ -578,7 +578,7 @@ off. It pushes its stored intrusion settings to a camera during enrollment.
 
 ### 7.4 Event history
 
-`{"method":"do","system":{"get_user_id":null}}` → `user_id`, then:
+`{"method":"do","system":{"get_user_id":null}}` в†’ `user_id`, then:
 
 ```json
 {"method":"do","playback":{"search_video_event_playback":{"client_id":<user_id>,"search_id":<random>,
@@ -586,7 +586,7 @@ off. It pushes its stored intrusion settings to a camera during enrollment.
   "start_time":<epoch>,"end_time":<epoch>,"start_index":0,"end_index":99}}}
 ```
 
-→ `playback.search_video_results`, rows `{channel, eventType, startTime, endTime}`
+в†’ `playback.search_video_results`, rows `{channel, eventType, startTime, endTime}`
 as strings. Bit n of `event_type_low32` selects history type n. History types
 differ from camera alarm types: 1 motion, 5 human motion, 7 human intrusion,
 8 vehicle motion, 37 pet motion. Intervals include roughly 4 s of pre-recording
@@ -650,7 +650,7 @@ excerpt has no startup version, so the failing executable version is unknown.
 At 09:00:20 UTC (12:00:20 Kyiv), four callback connections closed within 34 ms
 at an empty frame boundary. All eight downstream RTSP connections then closed
 about a second later. The translator continued retries and accepted fresh
-recorder logins at 09:00:33–34 UTC; this is not a translator restart in the log.
+recorder logins at 09:00:33вЂ“34 UTC; this is not a translator restart in the log.
 
 The recorder had just requested `preset.get_preset` with `count`,
 `position_info` and `start_id`. Two source reads were refused; the other
@@ -666,9 +666,21 @@ Release 0.2.27 rejects native
 reply with another guessed schema. The operator subsequently confirmed that
 0.2.27 was stable with video when PTZ blocks and their module advertisement
 keys were removed. This establishes the recovery configuration, not the exact
-faulting response or successful PTZ interoperability. A captured real native
-PTZ reply and complete contract verification are required before reenabling
-those advertisements.
+faulting response or successful PTZ interoperability. This recovery alone did not verify PTZ interoperability; do not restore the former preset
+advertisements or success response based on it.
+
+The 0.3.1 pan/tilt-only trial separates native `get ptz.capability` from the
+recorder UI API. The native response includes `continuous_move_supported`
+from source discovery and disables preset, zoom, absolute and relative move
+advertisements. Field names, string types and native movement/Stop request
+shapes are supported by TP-Link's [official camera emulator](https://emulator.tp-link.com/vigi-ipc/admin/Index.htm)
+and shipped camera UI. The emulator supplies static fixtures, not captured
+hardware responses. A read-only request forwarded through the NVR to a real
+fixed Omada camera returned `-40106` for both native preset query forms;
+the translator retains that rejection. The operator subsequently reported the
+0.3.1 NVR pan/tilt trial working on one Imou lens. That is initial interoperability
+evidence, not extended stability or support on every camera. Position ranges,
+status and successful native preset replies remain unimplemented rather than inferred.
 
 ## 9. How any-to-omada implements it
 
@@ -677,14 +689,16 @@ those advertisements.
 | HTTPS management API | `internal/omadafront` | login proof, sessions, discovery, registration, reads and writes; the same handler serves passthrough |
 | Callback handshake and framing | `internal/omadalink`, `internal/spakeee` | PAKE, certificate delivery, TLS, declarations, application authentication, passthrough encoding, alarms |
 | Virtual settings | `internal/omadafront/virtual_time.go`, `virtual_imaging.go`, `virtual_detection.go` | time zone, DST and clock offset; anti-flicker and sensor rate; motion, tamper, intrusion and smart frame. Kept in memory per camera; never written to the source camera |
-| Alarm mapping | `internal/app/event_translation.go` | motion → 2; smart human/vehicle/pet motion → 32/33/80; line → 4/36/37/81; intrusion → 5/34/35/82; tamper → 3; scoped `Intelligent` classes → intrusion. Starts are gated by virtual settings; matching stops remain eligible |
+| Alarm mapping | `internal/app/event_translation.go` | motion в†’ 2; smart human/vehicle/pet motion в†’ 32/33/80; line в†’ 4/36/37/81; intrusion в†’ 5/34/35/82; tamper в†’ 3; scoped `Intelligent` classes в†’ intrusion. Starts are gated by virtual settings; matching stops remain eligible |
 | RTSP | `internal/camerartsp` | forwards encoded video without transcoding; own Digest MD5 verification; optional marker injection adjusts RTP sequencing |
 | Marker metadata | `internal/tpmarker`, `internal/camerartsp/marker_inserter.go` | idle unit every frame; intrusion alert while a classified intrusion is open; no boxes |
 | Source events | `internal/dvripcapture`, `internal/isapievents`, `internal/onvifevents` | Dahua/Imou DVRIP, Hikvision ISAPI alert stream, ONVIF PullPoint; all emit brand-neutral `VideoMotion`, `SmartMotionHuman/Vehicle/Pet`, `CrossLineDetection`, `CrossRegionDetection`, `VideoBlind` edges (`internal/cameraevents/canonical.go`) |
-| PTZ | `internal/onvifptz`, `internal/omadafront/ptz.go` | one Imou source acknowledged a bounded move and Stop through the existing ONVIF backend; NVR-facing PTZ remains experimental and disabled by default. Native `preset.get_preset` is unsupported pending verified camera replies; see section 8.4 |
-| Local output tests | `internal/app/controls.go`, `internal/dvripcapture/lighting.go`, `internal/onvifoutput` | opt-in loopback operator API for PTZ, native white light and advertised monostable relay pulses; not an implementation of the NVR's unverified native light/siren control requests |
+| PTZ | `internal/onvifptz`, `internal/dvripptz`, `internal/omadafront/ptz.go` | explicit ONVIF or native DVRIP backend with bounded continuous pan/tilt. One Imou lens has operator-confirmed NVR success. Native presets remain unsupported; see section 8.4 |
+| Manual outputs | `internal/omadafront/outputs.go`, `internal/dvripcapture/deterrence.go` | source-acknowledged native manual sound/light alarms with independent Stop watchdogs; no automatic arming, custom sound or alarm schedules |
+| Illumination | `internal/omadafront/illumination.go`, `internal/app/illumination.go`, `internal/dvripcapture/lighting_mode.go` | opt-in persistent source night-mode/white-brightness settings with capability checks, readback and failed-write restoration |
+| Local output tests | `internal/app/controls.go`, `internal/onvifoutput` | loopback tests remain separate from recorder UI validation; an external relay is not a built-in siren |
 
-**Validation boundary.** The ISAPI and ONVIF source adapters have
+**Validation boundary.** The ISAPI and ONVIF event adapters have
 been exercised with protocol fakes only. The real-camera/recorder evidence in
 this document is from Omada and translated Dahua/Imou sources; it does not
 establish enrollment or event-history acceptance for other brands. Adapter

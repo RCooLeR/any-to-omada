@@ -2,19 +2,17 @@ package dvripcapture
 
 import (
 	"context"
-	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"math"
-	"net"
-	"strconv"
 	"time"
 
 	"github.com/RCooLeR/any-to-omada/internal/capture"
 )
 
-// ErrLightingUnsupported means that the selected lens/profile does not expose
-// exactly one WhiteLight entry in the observed Lighting_V2 configuration.
+// ErrLightingUnsupported means that the selected lens/profile or operation lacks
+// a validated native lighting contract. Pulse requires one WhiteLight entry;
+// persistent illumination also requires advertised modes and a physical bank.
 var ErrLightingUnsupported = errors.New("white light configuration unsupported")
 
 // ErrLightingRestore means the test could not confirm restoration of the
@@ -224,111 +222,11 @@ func whiteLightEntry(table []any, profile int) (map[string]any, error) {
 	return selected, nil
 }
 
-// session isolates operator controls from event capture, bounds each RPC, and reconnects a
-// broken stream only for restoration reads.
-func (l *Lighting) session(ctx context.Context, fn func(lightingCall) error) (result error) {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	port := l.device.NativePort
-	if port == 0 {
-		port = 37777
-	}
-	conn, err := (&net.Dialer{Timeout: 3 * time.Second}).DialContext(ctx, "tcp", net.JoinHostPort(l.device.Host, strconv.Itoa(port)))
-	if err != nil {
-		return lightingFailure("session", "connect", nil)
-	}
-	defer func() { _ = conn.Close() }()
-	c := &client{conn: conn, device: l.device, requestID: 1, timings: timings{rpc: 3 * time.Second}}
-	if err := c.login(ctx); err != nil {
-		if errors.Is(err, capture.ErrAuthentication) {
-			return lightingFailure("session", "authentication_rejected", capture.ErrAuthentication)
-		}
-		return lightingFailure("session", "authentication_unavailable", nil)
-	}
-	broken := false
-	call := func(ctx context.Context, method string, params any) (map[string]any, error) {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		if broken {
-			_ = conn.Close()
-			// A partial frame destroys stream alignment. Only a fresh session
-			// may read restoration state; never retry the activation write.
-			if method != "configManager.getConfig" {
-				return nil, lightingFailure(method, "session_unavailable", nil)
-			}
-			var err error
-			nextConn, err := (&net.Dialer{Timeout: 2 * time.Second}).DialContext(ctx, "tcp", net.JoinHostPort(l.device.Host, strconv.Itoa(port)))
-			if err != nil {
-				return nil, lightingFailure(method, "restore_reconnect", nil)
-			}
-			conn = nextConn
-			c.conn, c.requestID = conn, 1
-			if err := c.login(ctx); err != nil {
-				return nil, lightingFailure(method, "restore_authentication", nil)
-			}
-			broken = false
-		}
-		deadline := time.Now().Add(3 * time.Second)
-		if end, ok := ctx.Deadline(); ok && end.Before(deadline) {
-			deadline = end
-		}
-		if err := conn.SetDeadline(deadline); err != nil {
-			broken = true
-			return nil, lightingFailure(method, "set_deadline", nil)
-		}
-		interrupted := make(chan struct{})
-		stopInterrupt := context.AfterFunc(ctx, func() { defer close(interrupted); _ = conn.SetDeadline(time.Now()) })
-		defer func() {
-			if !stopInterrupt() {
-				<-interrupted
-			}
-		}()
-		c.requestID++
-		body, err := json.Marshal(map[string]any{"method": method, "params": params, "id": c.requestID, "session": c.session})
-		if err != nil {
-			return nil, lightingFailure(method, "encode", nil)
-		}
-		header := [32]byte{0: 0xf6}
-		binary.LittleEndian.PutUint32(header[8:12], c.requestID)
-		binary.LittleEndian.PutUint32(header[16:20], uint32(len(body)))
-		binary.LittleEndian.PutUint32(header[24:28], c.session)
-		if writeFrame(conn, header, body) != nil {
-			broken = true
-			return nil, lightingFailure(method, "write_outcome_unknown", nil)
-		}
-		// Ignore only a bounded number of late replies; a timed-out write
-		// must not be confused with the following restoration read.
-		for i := 0; i < 8; i++ {
-			packet, err := readFrame(conn)
-			if err != nil {
-				broken = true
-				return nil, lightingFailure(method, "read_response", ctx.Err())
-			}
-			messages, err := jsonMessages(packet.body)
-			if err != nil {
-				broken = true
-				return nil, lightingFailure(method, "decode_response", nil)
-			}
-			for _, answer := range messages {
-				if answer["id"] != json.Number(strconv.FormatUint(uint64(c.requestID), 10)) {
-					continue
-				}
-				if answer["result"] != true {
-					return nil, lightingRejection(method, answer)
-				}
-				return answer, nil
-			}
-		}
-		return nil, lightingFailure(method, "response_mismatch", nil)
-	}
-	defer func() {
-		cleanup, cancel := context.WithTimeout(context.Background(), time.Second)
-		defer cancel()
-		if _, err := call(cleanup, "global.logout", nil); err != nil {
-			result = errors.Join(result, err)
-		}
-	}()
-	return fn(call)
+// session adapts the shared bounded native transport to lighting operations.
+func (l *Lighting) session(ctx context.Context, fn func(lightingCall) error) error {
+	return ControlSession(ctx, l.device, func(call ControlCall) error {
+		return fn(func(ctx context.Context, method string, params any) (map[string]any, error) {
+			return call(ctx, ControlRequest{Method: method, Params: params})
+		})
+	})
 }

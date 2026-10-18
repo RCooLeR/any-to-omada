@@ -6,14 +6,43 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/RCooLeR/any-to-omada/internal/capture"
 	"github.com/RCooLeR/any-to-omada/internal/config"
+	"github.com/RCooLeR/any-to-omada/internal/dvripptz"
 	"github.com/RCooLeR/any-to-omada/internal/omadafront"
 	"github.com/RCooLeR/any-to-omada/internal/onvifptz"
 )
 
-// newPTZ prepares a lens controller with the source ONVIF account. Camera
+// ptzController is the common bounded source-control contract. Native DVRIP
+// implementations reject preset methods instead of advertising unsupported work.
+type ptzController interface {
+	// Capability reads source-supported axes without moving the camera.
+	Capability(context.Context) (onvifptz.Capability, error)
+	// Move queues bounded normalized movement; receipt is not device acknowledgement.
+	Move(float64, float64, float64)
+	// Stop prioritizes stopping any acknowledged or uncertain movement.
+	Stop()
+	// Status reports local counters and unresolved physical movement.
+	Status() onvifptz.Status
+	// Close stops the worker and attempts bounded physical cleanup.
+	Close()
+	// Presets lists source positions where that backend supports them.
+	Presets(context.Context) ([]onvifptz.Preset, error)
+	// GotoPreset recalls a supported source position with bounded cleanup.
+	GotoPreset(context.Context, string) error
+	// SetPreset saves a supported source position and returns its native token.
+	SetPreset(context.Context, string, string) (string, error)
+	// RemovePreset deletes a source position only on backends supporting presets.
+	RemovePreset(context.Context, string) error
+}
+
+// newPTZ prepares a lens controller with the configured source account. Camera
 // discovery and actuation begin only when a caller requests controls or capabilities.
-func newPTZ(camera config.Camera, source config.Source, password string, logger *slog.Logger) (*onvifptz.Controller, error) {
+func newPTZ(camera config.Camera, source config.Source, password string, logger *slog.Logger) (ptzController, error) {
+	if camera.PTZ.Backend == "dvrip" {
+		return dvripptz.New(dvripptz.Config{Device: capture.Device{ID: source.ID, Host: source.Host, NativePort: source.NativePort, Username: source.Account.Username, Password: password},
+			Channel: camera.SourceIndex, MaxMove: time.Duration(camera.PTZ.MaxMoveSeconds) * time.Second, Logger: logger})
+	}
 	return onvifptz.New(onvifptz.Config{Host: source.Host, Port: camera.PTZ.ONVIFPort, Username: source.Account.Username, Password: password,
 		ProfileToken: camera.PTZ.ProfileToken, MaxMove: time.Duration(camera.PTZ.MaxMoveSeconds) * time.Second, Logger: logger})
 }
@@ -22,7 +51,7 @@ func newPTZ(camera config.Camera, source config.Source, password string, logger 
 // camera token is its own number; other tokens cannot be addressed and are left
 // out instead of being renumbered.
 type ptzAdapter struct {
-	controller *onvifptz.Controller
+	controller ptzController
 	logger     *slog.Logger
 }
 

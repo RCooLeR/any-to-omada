@@ -11,10 +11,10 @@ Start with one camera and a spare NVR channel. You need a reachable camera with 
 | Events | Motion, human/vehicle/pet motion, line crossing, intrusion and tamper mappings. Motion and human intrusion have recorder-history evidence. Other model/event combinations still need validation. |
 | Multiple lenses | Separate virtual IP, account and streams per verified lens, sharing one event subscription per physical camera. |
 | Other source brands | ISAPI and ONVIF adapters have simulated protocol tests, not the same live verification as Dahua/Imou. |
-| Settings | Selected time, imaging and detection settings are emulated per virtual camera. They do not change the physical encoder or detection rules. |
-| Physical controls | Experimental opt-in ONVIF PTZ, Dahua/Imou white-light pulses and advertised ONVIF alarm-output relays. One Imou camera acknowledged a short PTZ move and Stop. White-light actuation, siren and NVR buttons remain unverified; see [physical controls](controls.md). |
+| Settings | Selected time, imaging and detection settings are emulated per virtual camera. Explicitly enabled illumination controls change supported physical lamp settings and verify source readback. Encoder and detection settings remain virtual. |
+| Physical controls | One Imou camera has operator-confirmed NVR PTZ movement on 0.3.1. The 0.4.0 source controls have alarm activation and Stop acknowledgements on four cameras, with sound and flashing light physically confirmed on one. One 20% white-light test completed for one second with source readback and restoration. NVR rendering of the new 0.4.0 controls and movement on other cameras still need testing; see [physical controls](controls.md). |
 
-Successful video does not establish control compatibility. The last confirmed recovery runtime, 0.2.27, was stable with video after PTZ advertisements were disabled. Keep control advertisements disabled for ordinary deployments; the [control guide](controls.md#recorder-compatibility) explains the recorder failures associated with earlier preset responses.
+Successful video does not establish control compatibility. Enable each control only for its verified source and lens, then test it on one recorder channel before expanding. Presets remain unsupported; the [control guide](controls.md#recorder-compatibility) explains the recorder failures associated with earlier preset responses and the evidence required for each control.
 
 ## Plan the network path
 

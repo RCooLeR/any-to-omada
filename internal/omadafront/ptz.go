@@ -62,9 +62,30 @@ func isPTZRequest(request map[string]json.RawMessage) bool {
 	return false
 }
 
-// ptzCapabilityFields answers the recorder UI's PTZ capability vocabulary.
-// Only movement and presets the source supports are reported.
-func (s *Server) ptzCapabilityFields(ctx context.Context) (map[string]any, bool) {
+// nativePTZCapabilityFields limits the camera-native capability response to
+// source-confirmed continuous pan/tilt. Native preset negotiation and zoom
+// remain unverified; no position ranges or status are synthesized.
+func (s *Server) nativePTZCapabilityFields(ctx context.Context) (map[string]any, bool) {
+	capability, err := s.ptz.Capability(ctx)
+	if err != nil {
+		return nil, false
+	}
+	continuousMove := "0"
+	if capability.PanTilt {
+		continuousMove = "1"
+	}
+	return map[string]any{
+		"continuous_move_supported": continuousMove,
+		"absolute_move_supported":   "0", "relative_move_supported": "0",
+		"zoom_supported": "0", "preset_supported": "0", "preset_number_max": "0",
+		"tour_supported": "0", "pattern_supported": "0", "calibrate_supported": "0", "high_speed_dome": "0",
+		"aperture_supported": "0", "focus_supported": "0", "pan_tilt_rotate_sync_supported": "0",
+	}, true
+}
+
+// recorderPTZCapabilityFields retains the recorder UI's separate PTZ
+// vocabulary, including source-supported zoom and preset operations.
+func (s *Server) recorderPTZCapabilityFields(ctx context.Context) (map[string]any, bool) {
 	capability, err := s.ptz.Capability(ctx)
 	if err != nil {
 		return nil, false
@@ -116,7 +137,7 @@ func (s *Server) ptzOperation(ctx context.Context, operation string, fields map[
 	ok := map[string]any{"error_code": 0}
 	switch operation {
 	case "ptz.get_ptz_capability":
-		capability, found := s.ptzCapabilityFields(ctx)
+		capability, found := s.recorderPTZCapabilityFields(ctx)
 		if !found {
 			return map[string]any{"error_code": unsupportedCode}, true
 		}

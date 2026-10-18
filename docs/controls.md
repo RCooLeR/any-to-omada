@@ -1,76 +1,92 @@
 # Physical controls
 
-Version 0.3.0 adds a loopback operator API for testing opt-in controls independently of the recorder. It does **not** add verified Omada NVR buttons or native white-light/siren request handlers. All physical-control blocks are absent from [config.example.json](../config.example.json).
+Version 0.4.0 provides opt-in recorder pan/tilt, manual sound/light alarms, and source-backed illumination settings. Each virtual camera must be mapped to the correct physical lens. A model name or a generic ONVIF PTZ node does not prove that a camera has a motor, lamp, or siren.
 
-## Hardware evidence
+## Configure supported hardware
 
-A direct test on one dual-lens Imou camera acknowledged one short ONVIF pan movement and Stop, with no controller errors.
-
-Native channel-scoped lighting reads also succeeded, but a bounded pulse attempt encountered authority-denied code `285278249`. No successful physical light pulse was established. Independent readback confirmed the original lighting settings were retained.
-
-The same camera advertised no ONVIF relay outputs. Its built-in siren has no verified local command in this implementation. These observations do not establish support on other models or through the NVR UI.
-
-## Configure an opt-in control
-
-Identify the actual control endpoint and lens before adding any of these blocks to a camera:
+Add only the blocks supported by the selected source. These are fragments, not complete configurations:
 
 ```json
 {
   "ptz": {"onvif_port": 80, "profile_token": "Profile000", "max_move_seconds": 2},
-  "white_light": {"profile": 0, "brightness": 50},
-  "alarm_output": {"onvif_port": 80, "relay_token": "RelayOutput1"}
+  "compatibility": {"ptz_module_spec_keys": ["ptz"]},
+  "deterrence": {"sound_alarm": true, "light_alarm": true, "max_alarm_seconds": 2},
+  "white_light": {
+    "profile": 0,
+    "brightness": 50,
+    "recorder_modes": ["white_led_always_on", "auto_color", "auto_ir", "ir_always_on"]
+  }
 }
 ```
 
-This is a fragment, not a complete configuration. Use only supported blocks; do not assume the example profile or relay tokens exist.
-
-| Control | Requirements |
+| Control | Requirements and behavior |
 | --- | --- |
-| PTZ | `lens: ptz`, the source's ONVIF port and the intended lens's media profile token. `max_move_seconds` configures the controller's Stop watchdog; omitted or zero uses 10 seconds, with a maximum of 60. A failed Stop can leave the camera moving. |
-| White light | Dahua/Imou source, verified lens, native `Lighting_V2` profile 0–7 and brightness 1–100. The camera's `source_index` selects the native lighting channel; `profile` selects a native lighting profile. |
-| Alarm output | Verified lens and an advertised monostable ONVIF relay with an existing device-side delay of 0.1–5 seconds. The service does not reconfigure relay mode or invent an output. |
+| PTZ | Verified `lens: ptz`, the correct ONVIF media profile, and a bounded Stop watchdog. An omitted backend selects ONVIF. Native recorder capability advertises continuous pan/tilt only. |
+| Native Dahua/Imou PTZ | Use `"ptz":{"backend":"dvrip","max_move_seconds":2}` without ONVIF port/profile fields. The adapter uses `source_index` and requires affirmative native pan/tilt capabilities. It does not support zoom or presets. |
+| Sound/light alarm | Dahua/Imou `CoaxialControlIO` must explicitly advertise each selected output. `max_alarm_seconds` is required and limited to 1–5 seconds. Start waits for source acceptance, and the service owns an automatic Stop. Alarm light may flash; it is separate from steady illumination. |
+| Illumination | A Dahua/Imou source must advertise the selected lamp modes, an actual adjustable white-light bank, and a fixed active profile matching `profile`. `recorder_modes` opts into persistent source settings. An empty list retains loopback testing only. Scheduled source profiles are rejected. |
+| External relay | Optional `"alarm_output":{"onvif_port":80,"relay_token":"RelayOutput1"}` requires a real advertised monostable relay and its existing 0.1–5 second device timer. A relay is not a built-in siren. |
 
-**An alarm-output relay is not a built-in siren.** A `lens: ptz` label alone enables no control. See [configuration](configuration.md) for the source account and other camera settings.
+ONVIF `max_move_seconds` defaults to 10; native DVRIP defaults to 2. Both accept at most 60 seconds. Use a short value during initial testing. All physical blocks are absent from [config.example.json](../config.example.json).
+
+## Recorder controls
+
+Native `ptz.continuous_move` and `ptz.stop` reach the selected physical backend. Successful PTZ replies mean the command was queued. The watchdog attempts Stop if the recorder does not send it. Native preset-list requests remain unsupported: the earlier fabricated response correlated with recorder system errors. Zoom, presets, tours, absolute movement and relative movement are not advertised.
+
+Manual alarms use `do msg_alarm.manual_msg_alarm` with `action: start` or `stop`. The start reply includes a numeric `timer` only after the source accepts the command. The Stop deadline starts when activation is attempted; a delayed acknowledgement does not extend it. `msg_alarm.chn1_msg_alarm_info` selects the enabled sound/light outputs for this manual action. Automatic event arming, schedules, custom recordings, repeat counts, siren volume and flash-frequency changes are not implemented and are rejected. Unsupported donor alarm advertisements are removed.
+
+Persistent illumination uses the recorder's image/night-vision settings, rather than a temporary alarm-light pulse:
+
+| Native policy | Physical source policy |
+| --- | --- |
+| `white_led_always_on` | White-light scheme, manual lamp mode |
+| `auto_color` | White-light scheme, automatic lamp mode |
+| `auto_ir` | Infrared scheme, automatic lamp mode |
+| `ir_always_on` | Infrared scheme, manual lamp mode |
+
+The `image.common.smartwtl` and `smartwtl_digital_level` settings select automatic/manual white intensity and a 0–100 percentage. Brightness changes preserve the current illumination scheme. Successful writes require source readback; failed partial writes attempt to restore only fields still owned by the request. These are intentional persistent configuration changes and survive translator restart.
+
+The Dahua source RPC uses the base names `Lighting_V2` and `LightingScheme` with complete device tables, matching the camera's shipped UI. Indexed config names are not scalar selectors on the verified firmware. Before each write or restoration, the adapter reads a fresh table, checks the selected fields, and changes only the requested channel/profile values while retaining the other settings. It never replays an old whole-device snapshot. Source operations are serialized within the translator; a separate camera client can still race the device's read/write interface.
+
+An existing source smart-light policy without a verified native equivalent is omitted from the native mode readback. It is never reported as OFF. The recorder has some fixed menu choices; unsupported choices, including unimplemented smart-trigger/off policies, are rejected even if its UI displays them. Full recorder-page rendering and forwarding require testing with the actual recorder firmware.
 
 ## Operator API
 
-Use the configured loopback address, for example:
+Health/status and explicit tests use the configured loopback listener, for example:
 
 ```text
 http://127.0.0.1:19031/api/v1/cameras/camera-a-lens-1/controls
 ```
 
-`GET` reports which controls are configured without contacting hardware. Send JSON with `Content-Type: application/json` to `POST` on the same path for an explicit operation:
+`GET` reports configured controls without contacting hardware. `POST` requires JSON and `Content-Type: application/json`:
 
 | Command body | Result |
 | --- | --- |
-| `{"command":"white_light_probe"}` | Read the selected native white-light settings without changing them. |
-| `{"command":"alarm_probe"}` | Check the advertised relay and its bounded device-side reset. |
-| `{"command":"ptz_move","pan":0.2,"tilt":0,"zoom":0}` | Queue movement; axes are -1 to 1 and are checked against discovered capabilities. |
-| `{"command":"ptz_stop"}` | Queue Stop, independently of other output operations. |
-| `{"command":"white_light_pulse","duration_ms":1000}` | Pulse for 100–5000 ms, then attempt restoration of the previous white-light fields. |
-| `{"command":"alarm_pulse"}` | Pulse the relay using its own advertised delay, then attempt an explicit inactive command. |
+| `{"command":"ptz_move","pan":0.2,"tilt":0,"zoom":0}` | Queue supported normalized movement; axes are -1 to 1. |
+| `{"command":"ptz_stop"}` | Queue priority Stop. |
+| `{"command":"sound_alarm_start"}` | Start the configured sound alarm for its bounded duration. |
+| `{"command":"light_alarm_start"}` | Start the configured alarm light. |
+| `{"command":"deterrence_start"}` | Start all configured sound/light alarm outputs. |
+| `{"command":"deterrence_stop"}` | Stop owned alarm outputs, independently of the source admission gate. |
+| `{"command":"white_light_probe"}` | Validate the source illumination contract when `recorder_modes` is configured; otherwise read the legacy experimental lighting configuration. |
+| `{"command":"white_light_pulse","duration_ms":1000}` | Apply a temporary manual white setting and restore it when `recorder_modes` is configured; otherwise use the legacy experimental pulse. |
+| `{"command":"alarm_probe"}` | Check the configured external relay and its device-side timer. |
+| `{"command":"alarm_pulse"}` | Activate that relay once, then attempt an explicit inactive command. |
 
-Browser-origin requests are rejected. Keep this operator API on loopback; do not publish or reverse-proxy it. The minimal image has no shell or curl. Use an appropriate local diagnostic client in the same network namespace or run a local test instance.
+Browser-origin requests are rejected. Keep this API on loopback. The container image has no shell or curl; use an appropriate local diagnostic client rather than exposing the endpoint.
 
-## Responses and recovery
+## Outcomes and recovery
 
-| Response | Meaning |
-| --- | --- |
-| `202`, `move_queued` or `stop_queued` | PTZ command queued; not a hardware acknowledgement. |
-| `200`, `completed` | Probe or pulse completed. Pulse requests wait through the action and cleanup. |
-| `501`, `control_unavailable` | The requested control is unsupported or unavailable. |
-| `409`, `source_control_busy` | Another operation owns the physical source's control slot, including another virtual lens. |
-| `502`, `source_control_failed` | The operation failed; `final_state` is `unconfirmed`. Failed light restoration also reports `restoration_failed: true`. |
+PTZ replies report queued work. Alarm starts report `source_acknowledged` and their timer; this does not measure the physical light or sound. Unsupported controls return `501`; concurrent source operations return `409`; failed writes return `502` with `final_state: unconfirmed`. Failed alarm cleanup adds `stop_unconfirmed`, and failed light restoration adds `restoration_failed`.
 
-A lost connection or power interruption can prevent light restoration or PTZ Stop. Check the physical state after a failure. A white-light restore rereads settings and refuses to overwrite a concurrent change. A monostable relay's own timer bounds its activation even if the translator disappears.
+`/status` retains uncertain PTZ motion, alarm state and persistent illumination restoration failures. A failed Stop or a lost connection can leave an output active. Local watchdogs require the translator and network to remain available; they are not device-side timers. Illumination restoration preserves unrelated settings and refuses to overwrite another controller's changes. HTTP/callback shutdown waits for bounded cleanup.
 
-## Recorder compatibility
+## Verification limits
 
-Physical controls are separate from [simulated camera settings](events.md#virtual-detection-settings). The source-side ONVIF PTZ backend includes presets, but its Omada-side preset response remains unsupported pending a verified native contract.
+The native PTZ and alarm request vocabulary is supported by shipped camera UI code and TP-Link's [official camera emulator](https://emulator.tp-link.com/vigi-ipc/admin/Index.htm). Native reference reads confirm alarm-setting shapes. Software tests exercise both authenticated HTTPS and native callback paths, source failures, cancellation, watchdogs and cleanup.
 
-The previous preset reply did not match the camera UI's nested structure, and recorder sessions failed during preset negotiation. The exact recorder failure trigger has not been isolated; a different guessed success shape is not a verified fix.
+One Imou camera has operator-confirmed NVR pan/tilt and direct physical sound/light activation. Other configured outputs require their own device/recorder validation; a capability flag alone is insufficient. Cameras with rejected control requests remain disabled for those controls. The source-side ONVIF backend retains preset support for explicit clients, but the recorder-native preset-list contract remains unsupported.
 
-The last confirmed recovery runtime, 0.2.27, was stable with video after PTZ advertisements were disabled. Keep control advertisements disabled for ordinary deployments and validate opt-ins on a spare channel before daily recording. See the [recorded PTZ evidence](omada-protocol.md#84-recorder-resets-during-ptz-negotiation-2026-10-17).
+On a DH-T4A-PV, a temporary 20% manual white setting held for one second passed source readback, followed by successful restoration and readback of the original settings. This verifies the complete source configuration path; it does not establish recorder UI behavior on every firmware or white-light support on other camera models.
 
-[Operation and troubleshooting](operations.md) · [Documentation index](../README.md)
+[Configuration](configuration.md) · [Operation and troubleshooting](operations.md) · [Documentation index](../README.md)

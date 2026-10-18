@@ -68,6 +68,6 @@ This profile advertises some native services without implementing them. Options 
 
 `compatibility.in_stream_markers` inserts observed per-frame `TPLINKMARKERBOX.` metadata into H.264/H.265 while preserving the encoded picture. It supplies an intrusion rule alert without fabricating target boxes. Line-specific marker metadata remains unimplemented. The [protocol reference](omada-protocol.md) distinguishes observed behavior, simulated tests and inference.
 
-Selected time, imaging and detection settings are emulated per virtual camera. They do not reconfigure the physical camera and reset on translator restart. Physical controls require separate opt-in blocks; read the [control guide](controls.md) before configuring them.
+Selected time, imaging and detection settings are emulated per virtual camera. Those simulated settings reset on translator restart. Explicit recorder illumination controls instead change physical lamp settings and require successful source readback. Physical controls require separate opt-in blocks; read the [control guide](controls.md) before configuring them.
 
-[Getting started](getting-started.md) · [Documentation index](../README.md)
+[Getting started](getting-started.md) В· [Documentation index](../README.md)

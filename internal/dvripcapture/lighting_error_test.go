@@ -36,3 +36,11 @@ func TestLightingDiagnosticSurvivesCleanupErrorJoin(t *testing.T) {
 		t.Fatal("cleanup diagnostic discarded")
 	}
 }
+
+func TestNativeControlRejectionReadsTopLevelNumericCode(t *testing.T) {
+	err := lightingRejection("CoaxialControlIO.control", map[string]any{"errCode": json.Number("287638033"), "message": "private upstream text"})
+	var failure *LightingError
+	if !errors.As(err, &failure) || failure.DeviceCode == nil || *failure.DeviceCode != 287638033 || strings.Contains(err.Error(), "private") {
+		t.Fatalf("native top-level refusal code lost or unsafe: %v", err)
+	}
+}

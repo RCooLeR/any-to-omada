@@ -45,6 +45,15 @@ func selectorNames(raw json.RawMessage) ([]string, bool) {
 // readSection resolves supported management leaves from source facts or
 // virtual state; optional PTZ capability discovery can contact the source.
 func (s *Server) readSection(module, name string, metadata Metadata) (any, bool) {
+	if len(s.illuminationCapability().Modes) > 0 && module == "image" && (name == "switch" || name == "common") {
+		return s.illuminationRead(module, name)
+	}
+	if fields, supported := s.illuminationRead(module, name); supported {
+		return fields, true
+	}
+	if fields, supported := s.outputRead(module, name); supported {
+		return fields, true
+	}
 	switch {
 	case module == "function" && name == "module_spec":
 		spec := map[string]any{"preview": []string{"local"}, "network": []string{"ethernet"},
@@ -60,11 +69,12 @@ func (s *Server) readSection(module, name string, metadata Metadata) (any, bool)
 				spec[key] = "1"
 			}
 		}
+		s.outputModuleSpec(spec)
 		return spec, true
 	case module == "ptz" && name == "capability" && s.ptz != nil:
 		ctx, cancel := context.WithTimeout(context.Background(), ptzCallTimeout)
 		defer cancel()
-		return s.ptzCapabilityFields(ctx)
+		return s.nativePTZCapabilityFields(ctx)
 	case module == "network" && name == "wan_status":
 		// This describes the reachable virtual management interface, not the
 		// source camera's physical link or its unobserved network settings.

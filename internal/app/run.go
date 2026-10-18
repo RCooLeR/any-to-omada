@@ -18,7 +18,9 @@ import (
 
 	"github.com/RCooLeR/any-to-omada/internal/cameraevents"
 	"github.com/RCooLeR/any-to-omada/internal/camerartsp"
+	"github.com/RCooLeR/any-to-omada/internal/capture"
 	"github.com/RCooLeR/any-to-omada/internal/config"
+	"github.com/RCooLeR/any-to-omada/internal/dvripcapture"
 	"github.com/RCooLeR/any-to-omada/internal/eventstore"
 	"github.com/RCooLeR/any-to-omada/internal/omadafront"
 	"github.com/RCooLeR/any-to-omada/internal/onvifoutput"
@@ -27,40 +29,44 @@ import (
 )
 
 // Version is the service version.
-const Version = "0.3.0"
+const Version = "0.4.0"
 
 // camera owns the listeners, media relay, native callback, and optional physical controls
 // for one configured virtual lens.
 type camera struct {
-	cfg      config.Camera
-	front    *omadafront.Server
-	media    *camerartsp.Server
-	server   *http.Server
-	listener net.Listener
-	tls      *tls.Config
-	callback *callback
-	ptz      *onvifptz.Controller
-	relay    *onvifoutput.Relay
+	cfg          config.Camera
+	front        *omadafront.Server
+	media        *camerartsp.Server
+	server       *http.Server
+	listener     net.Listener
+	tls          *tls.Config
+	callback     *callback
+	ptz          ptzController
+	relay        *onvifoutput.Relay
+	deterrence   *dvripcapture.Deterrence
+	illumination *cameraIllumination
 }
 
 // cameraStatus combines virtual identity and component snapshots; native readiness describes
 // callback transport rather than verified recorder enrollment.
 type cameraStatus struct {
-	ID                  string             `json:"id"`
-	Enabled             bool               `json:"enabled"`
-	Verified            bool               `json:"verified"`
-	SourceID            string             `json:"source_id"`
-	SourceIndex         int                `json:"source_index"`
-	Lens                string             `json:"lens"`
-	AdvertisedIP        string             `json:"advertised_ip"`
-	LogicalRecorderIP   string             `json:"logical_recorder_ip"`
-	NativeOmadaReady    bool               `json:"native_omada_ready"`
-	NativeAlarmDelivery string             `json:"native_alarm_delivery"`
-	PTZControl          string             `json:"ptz_control"`
-	PTZ                 *onvifptz.Status   `json:"ptz,omitempty"`
-	Management          *omadafront.Status `json:"management,omitempty"`
-	Media               *camerartsp.Status `json:"media,omitempty"`
-	Callback            *callbackStatus    `json:"callback,omitempty"`
+	ID                  string                         `json:"id"`
+	Enabled             bool                           `json:"enabled"`
+	Verified            bool                           `json:"verified"`
+	SourceID            string                         `json:"source_id"`
+	SourceIndex         int                            `json:"source_index"`
+	Lens                string                         `json:"lens"`
+	AdvertisedIP        string                         `json:"advertised_ip"`
+	LogicalRecorderIP   string                         `json:"logical_recorder_ip"`
+	NativeOmadaReady    bool                           `json:"native_omada_ready"`
+	NativeAlarmDelivery string                         `json:"native_alarm_delivery"`
+	PTZControl          string                         `json:"ptz_control"`
+	PTZ                 *onvifptz.Status               `json:"ptz,omitempty"`
+	Deterrence          *dvripcapture.DeterrenceStatus `json:"deterrence,omitempty"`
+	Illumination        *illuminationStatus            `json:"illumination,omitempty"`
+	Management          *omadafront.Status             `json:"management,omitempty"`
+	Media               *camerartsp.Status             `json:"media,omitempty"`
+	Callback            *callbackStatus                `json:"callback,omitempty"`
 }
 
 // Run starts one event worker per enabled physical source and two shared media
@@ -139,11 +145,19 @@ func Run(parent context.Context, cfg config.Config, logger *slog.Logger) (runErr
 			if camera.callback != nil {
 				camera.callback.close()
 			}
+			if camera.illumination != nil {
+				camera.illumination.Close()
+			}
 			if camera.ptz != nil {
 				camera.ptz.Close()
 			}
 			if camera.relay != nil {
 				camera.relay.Close()
+			}
+			if camera.deterrence != nil {
+				if err := camera.deterrence.Close(); err != nil {
+					logger.Warn("alarm stop unconfirmed during shutdown", "camera_id", camera.cfg.ID)
+				}
 			}
 		}
 		wg.Wait()
@@ -170,6 +184,10 @@ func Run(parent context.Context, cfg config.Config, logger *slog.Logger) (runErr
 			return errors.New("initialize native callback credentials failed")
 		}
 		var ptz omadafront.PTZ
+		source := sourceConfigs[configured.SourceID]
+		if controlGates[source.ID] == nil {
+			controlGates[source.ID] = &sourceControlGate{busy: make(chan struct{}, 1)}
+		}
 		if configured.PTZ != nil {
 			source := sourceConfigs[configured.SourceID]
 			cam.ptz, err = newPTZ(configured, source, passwords[source.ID], logger.With("camera_id", configured.ID))
@@ -178,9 +196,25 @@ func Run(parent context.Context, cfg config.Config, logger *slog.Logger) (runErr
 			}
 			ptz = ptzAdapter{controller: cam.ptz, logger: logger.With("camera_id", configured.ID)}
 		}
+		var outputs omadafront.OutputControls
+		var illumination omadafront.IlluminationControls
+		if light := configured.WhiteLight; light != nil && len(light.RecorderModes) > 0 {
+			cam.illumination = &cameraIllumination{cfg: light, channel: configured.SourceIndex, gate: controlGates[source.ID], logger: logger.With("camera_id", configured.ID),
+				light: dvripcapture.NewLighting(capture.Device{ID: source.ID, Host: source.Host, NativePort: source.NativePort, Username: source.Account.Username, Password: passwords[source.ID]})}
+			illumination = cam.illumination
+		}
+		if d := configured.Deterrence; d != nil {
+			cam.deterrence, err = dvripcapture.NewDeterrence(dvripcapture.DeterrenceConfig{
+				Device:  capture.Device{ID: source.ID, Host: source.Host, NativePort: source.NativePort, Username: source.Account.Username, Password: passwords[source.ID]},
+				Channel: configured.SourceIndex, MaxDuration: time.Duration(d.MaxAlarmSeconds) * time.Second, Light: d.LightAlarm, Sound: d.SoundAlarm})
+			if err != nil {
+				return errors.New("initialize native alarm controls failed")
+			}
+			outputs = &cameraOutputs{cfg: d, alarm: cam.deterrence, gate: controlGates[source.ID]}
+		}
 		cam.front, err = omadafront.New(omadafront.Config{Username: configured.Account.Username, Password: accountPasswords[configured.ID], IP: configured.AdvertisedIP, MAC: cam.callback.identity.MAC, Logger: logger.With("camera_id", configured.ID), StartCallback: cam.callback.register, StopCallback: cam.callback.stop,
 			Metadata: func() omadafront.Metadata { return cameraMetadata(cam, sourceWorkers[configured.SourceID]) }, RTSPDigest: true,
-			ClientCounts: func() (int, int) { return cameraClientCounts(cam) }, Compatibility: compatibility(configured.Compatibility), PTZ: ptz})
+			ClientCounts: func() (int, int) { return cameraClientCounts(cam) }, Compatibility: compatibility(configured.Compatibility), PTZ: ptz, Outputs: outputs, Illumination: illumination})
 		if err != nil {
 			return errors.New("initialize virtual management failed")
 		}
@@ -190,10 +224,6 @@ func Run(parent context.Context, cfg config.Config, logger *slog.Logger) (runErr
 		cam.listener, err = net.Listen("tcp", configured.ManagementAddress)
 		if err != nil {
 			return fmt.Errorf("bind virtual management: %w", err)
-		}
-		source := sourceConfigs[configured.SourceID]
-		if controlGates[source.ID] == nil {
-			controlGates[source.ID] = &sourceControlGate{busy: make(chan struct{}, 1)}
 		}
 		controls[configured.ID] = prepareControls(cam, source, passwords[source.ID], controlGates[source.ID])
 		u, _ := config.StreamURL(configured.MainURL, source.Host)
@@ -250,6 +280,17 @@ func Run(parent context.Context, cfg config.Config, logger *slog.Logger) (runErr
 			if camera.ptz != nil {
 				ptzStatus := camera.ptz.Status()
 				status.PTZ, status.PTZControl = &ptzStatus, "onvif_unverified"
+				if camera.cfg.PTZ.Backend == "dvrip" {
+					status.PTZControl = "dvrip_unverified"
+				}
+			}
+			if camera.deterrence != nil {
+				outputStatus := camera.deterrence.Status()
+				status.Deterrence = &outputStatus
+			}
+			if camera.illumination != nil {
+				illuminationState := camera.illumination.Status()
+				status.Illumination = &illuminationState
 			}
 			if camera.callback != nil {
 				callback := camera.callback.snapshot()

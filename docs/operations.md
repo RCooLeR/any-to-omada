@@ -44,7 +44,7 @@ Share startup versions and fixed-label errors when reporting failures. Exclude r
 
 The last confirmed recovery runtime, 0.2.27, was stable with video after PTZ advertisements were disabled. Earlier native preset responses were associated with recorder session failures; the exact trigger has not been isolated. Successful video does not establish control compatibility.
 
-Keep control advertisements disabled for ordinary deployments. The [control guide](controls.md) documents opt-in testing, response meanings and recovery after an unconfirmed physical operation.
+Enable control advertisements only for source-confirmed hardware with explicit control blocks. The [control guide](controls.md) documents the pan/tilt-only native contract, manual alarms, persistent illumination, and recovery after an unconfirmed physical operation. Native presets remain unadvertised and their list request remains unsupported.
 
 ## Deployment references
 
@@ -52,4 +52,4 @@ Use the [NAS/container guide](../deploy/nas/README.md) for permissions and execu
 
 Every virtual stream crosses the translator. A process or network outage interrupts those streams; there is no direct-camera failover.
 
-[Getting started](getting-started.md) · [Documentation index](../README.md)
+[Getting started](getting-started.md) В· [Documentation index](../README.md)

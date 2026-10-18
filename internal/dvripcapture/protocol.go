@@ -1,5 +1,5 @@
-// DVRIP framing and legacy challenge authentication shared by event capture and
-// the isolated, explicitly configured lighting test client.
+// Package dvripcapture provides DVRIP framing and legacy challenge
+// authentication for event capture and explicitly configured physical controls.
 package dvripcapture
 
 import (

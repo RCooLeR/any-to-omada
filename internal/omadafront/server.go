@@ -61,6 +61,10 @@ type Config struct {
 	Compatibility Compatibility
 	// PTZ moves the source lens; nil keeps PTZ unsupported and unadvertised.
 	PTZ PTZ
+	// Outputs controls verified physical deterrence modes; nil disables their offers.
+	Outputs OutputControls
+	// Illumination controls verified persistent source lighting policies.
+	Illumination IlluminationControls
 }
 
 // CallbackRequest carries a fresh recorder-issued credential. It must never be
@@ -84,7 +88,7 @@ type Status struct {
 }
 
 // Server is a concurrency-safe management handler with in-memory virtual
-// settings and sessions. Configured callback and PTZ delegates can perform
+// settings and sessions. Configured callback, PTZ, output and illumination delegates can perform
 // network operations; session expiry itself needs no background goroutine.
 type Server struct {
 	username       string
@@ -104,6 +108,9 @@ type Server struct {
 	virtualImaging *virtualImagingState
 	virtualDetect  *virtualDetectionState
 	ptz            PTZ
+	outputs        OutputControls
+	illumination   IlluminationControls
+	outputState    outputState
 	started        time.Time
 	now            func() time.Time
 	// mu guards sessions and status. No HTTP I/O occurs while it is held.
@@ -142,11 +149,13 @@ func New(cfg Config) (*Server, error) {
 	}
 	server := &Server{username: cfg.Username, passwordHash: strings.ToUpper(hex.EncodeToString(hash[:])), ip: ip.String(), mac: mac,
 		ttl: cfg.SessionTTL, maxSessions: cfg.MaxSessions, logger: cfg.Logger, started: time.Now(), now: time.Now,
-		startCallback: cfg.StartCallback, stopCallback: cfg.StopCallback, metadata: cfg.Metadata, rtspDigest: cfg.RTSPDigest, clientCounts: cfg.ClientCounts, compat: cfg.Compatibility, ptz: cfg.PTZ,
+		startCallback: cfg.StartCallback, stopCallback: cfg.StopCallback, metadata: cfg.Metadata, rtspDigest: cfg.RTSPDigest, clientCounts: cfg.ClientCounts, compat: cfg.Compatibility, ptz: cfg.PTZ, outputs: cfg.Outputs, illumination: cfg.Illumination,
 		sessions: make(map[string]time.Time), status: Status{Unsupported: make(map[string]uint64), NativeEventsImplemented: cfg.StartCallback != nil}}
 	server.virtualTime = newVirtualTimeState(func() time.Time { return server.now() })
 	server.virtualImaging = newVirtualImagingState()
 	server.virtualDetect = newVirtualDetectionState()
+	capability := server.outputCapability()
+	server.outputState.sound, server.outputState.light = capability.SoundAlarm, capability.LightAlarm
 	return server, nil
 }
 
@@ -277,6 +286,18 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	diagnostic.authOutcome = "authenticated"
+	if response, ok := s.illuminationRequest(r.Context(), method, request); ok {
+		diagnostic.operation = "illumination_control"
+		diagnostic.requestShape = requestShape(request)
+		s.write(w, http.StatusOK, response)
+		return
+	}
+	if response, ok := s.outputRequest(r.Context(), method, request); ok {
+		diagnostic.operation = "output_control"
+		diagnostic.requestShape = requestShape(request)
+		s.write(w, http.StatusOK, response)
+		return
+	}
 	if s.ptz != nil && isPTZRequest(request) {
 		diagnostic.requestShape = requestShape(request)
 		if response, ok := s.ptzRequest(r.Context(), method, request); ok {

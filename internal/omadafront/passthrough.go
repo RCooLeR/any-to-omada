@@ -7,8 +7,8 @@ import (
 
 // Passthrough dispatches an already URL-decoded management object received over
 // the authenticated native recorder callback. It creates no HTTP session.
-// Image, detection and time writes change virtual state only; an explicitly
-// configured PTZ controller can send physical control requests. The caller
+// Image flicker, detection and time writes change virtual state only; explicitly
+// configured PTZ, output and illumination delegates can control sources. The caller
 // must complete callback authentication before using this entry point.
 func (s *Server) Passthrough(raw json.RawMessage) json.RawMessage {
 	response := map[string]any{"error_code": unsupportedCode}
@@ -19,14 +19,23 @@ func (s *Server) Passthrough(raw json.RawMessage) json.RawMessage {
 	s.mu.Lock()
 	s.status.Requests++
 	s.mu.Unlock()
+	outputHandled := false
+	illuminationHandled := false
+	if valid {
+		if value, ok := s.illuminationRequest(context.Background(), method, request); ok {
+			response, illuminationHandled = value, true
+		} else if value, ok := s.outputRequest(context.Background(), method, request); ok {
+			response, outputHandled = value, true
+		}
+	}
 	ptzHandled := false
-	if valid && s.ptz != nil && isPTZRequest(request) {
+	if valid && !outputHandled && !illuminationHandled && s.ptz != nil && isPTZRequest(request) {
 		response, ptzHandled = s.ptzRequest(context.Background(), method, request)
 		if !ptzHandled {
 			response = map[string]any{"error_code": unsupportedCode}
 		}
 	}
-	if valid && !ptzHandled {
+	if valid && !ptzHandled && !outputHandled && !illuminationHandled {
 		if method == "get" {
 			if value, ok := s.read(request); ok {
 				response = value
@@ -51,9 +60,15 @@ func (s *Server) Passthrough(raw json.RawMessage) json.RawMessage {
 			if ptzHandled {
 				operation = "ptz_control"
 			}
+			if outputHandled {
+				operation = "output_control"
+			}
+			if illuminationHandled {
+				operation = "illumination_control"
+			}
 		}
 		fields := []any{"operation", operation, "error_code", code}
-		if valid && (code != 0 || ptzHandled) {
+		if valid && (code != 0 || ptzHandled || outputHandled || illuminationHandled) {
 			fields = append(fields, "request_shape", requestShape(request))
 		}
 		if valid && method == "get" {

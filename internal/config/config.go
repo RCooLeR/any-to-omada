@@ -92,15 +92,17 @@ type Compatibility struct {
 	PTZModuleSpecKeys []string `json:"ptz_module_spec_keys,omitempty"`
 }
 
-// PTZ forwards recorder pan/tilt, zoom and preset commands to the physical
-// source's ONVIF PTZ service with the source account. Omitted keeps PTZ
-// unsupported.
+// PTZ selects the bounded source controller using the existing source account.
+// Omitted keeps controls unsupported. Native DVRIP supports pan/tilt only;
+// ONVIF optional features are not necessarily advertised to the recorder.
 type PTZ struct {
+	// Backend is onvif (the default) or dvrip for source-confirmed native PTZ.
+	Backend string `json:"backend,omitempty"`
 	// ONVIFPort is the source's ONVIF HTTP port (Imou and Dahua use 80).
-	ONVIFPort int `json:"onvif_port"`
+	ONVIFPort int `json:"onvif_port,omitempty"`
 	// ProfileToken is this lens's ONVIF media profile, which carries its PTZ node.
-	ProfileToken string `json:"profile_token"`
-	// MaxMoveSeconds bounds a movement that receives no stop; default 10.
+	ProfileToken string `json:"profile_token,omitempty"`
+	// MaxMoveSeconds bounds movement without Stop: default ONVIF 10, DVRIP 2.
 	MaxMoveSeconds int `json:"max_move_seconds,omitempty"`
 }
 
@@ -137,10 +139,13 @@ type Camera struct {
 	Compatibility Compatibility `json:"compatibility,omitempty"`
 	// PTZ enables recorder PTZ control of a lens marked "ptz".
 	PTZ *PTZ `json:"ptz,omitempty"`
-	// WhiteLight and AlarmOutput enable explicit loopback tests only. They do
-	// not advertise unverified controls to the recorder.
+	// WhiteLight enables explicit loopback tests and optionally opts into
+	// persistent recorder illumination. AlarmOutput selects an external relay.
 	WhiteLight  *WhiteLight  `json:"white_light,omitempty"`
 	AlarmOutput *AlarmOutput `json:"alarm_output,omitempty"`
+	// Deterrence exposes explicitly selected native sound/light alarm outputs
+	// to authenticated recorder controls and the loopback operator API.
+	Deterrence *Deterrence `json:"deterrence,omitempty"`
 }
 
 // Storage bounds retained JSONL payloads across process restarts.
@@ -243,7 +248,7 @@ func (c Config) Validate() error {
 		if err := v.Compatibility.validate(); err != nil {
 			return err
 		}
-		if err := v.validatePTZ(); err != nil {
+		if err := v.validatePTZ(s); err != nil {
 			return err
 		}
 		if err := v.validateControls(s); err != nil {
@@ -295,16 +300,27 @@ var ptzModuleSpecCandidates = map[string]bool{"motor": true, "ptz": true, "prese
 
 // validatePTZ permits physical controls only for a PTZ lens with a bounded movement duration
 // and allowlisted capability experiments.
-func (v Camera) validatePTZ() error {
+func (v Camera) validatePTZ(source Source) error {
 	if v.PTZ == nil {
 		if len(v.Compatibility.PTZModuleSpecKeys) > 0 {
 			return errors.New("compatibility ptz_module_spec_keys requires a ptz block")
 		}
 		return nil
 	}
-	if v.Lens != "ptz" || v.PTZ.ONVIFPort < 1 || v.PTZ.ONVIFPort > 65535 || !profileToken.MatchString(v.PTZ.ProfileToken) ||
-		v.PTZ.MaxMoveSeconds < 0 || v.PTZ.MaxMoveSeconds > 60 {
-		return errors.New("ptz requires a ptz lens, an ONVIF port, a profile token and at most 60 move seconds")
+	if v.Lens != "ptz" || v.PTZ.MaxMoveSeconds < 0 || v.PTZ.MaxMoveSeconds > 60 {
+		return errors.New("ptz requires a ptz lens and at most 60 move seconds")
+	}
+	switch v.PTZ.Backend {
+	case "", "onvif":
+		if v.PTZ.ONVIFPort < 1 || v.PTZ.ONVIFPort > 65535 || !profileToken.MatchString(v.PTZ.ProfileToken) {
+			return errors.New("onvif ptz requires an ONVIF port and a profile token")
+		}
+	case "dvrip":
+		if (source.Brand != "dahua" && source.Brand != "imou") || v.PTZ.ONVIFPort != 0 || v.PTZ.ProfileToken != "" || v.SourceIndex > 255 {
+			return errors.New("dvrip ptz requires a Dahua/Imou source without ONVIF fields")
+		}
+	default:
+		return errors.New("ptz backend must be onvif or dvrip")
 	}
 	seen := map[string]bool{}
 	for _, key := range v.Compatibility.PTZModuleSpecKeys {
