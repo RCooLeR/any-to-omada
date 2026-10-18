@@ -26,6 +26,8 @@ func RequestShape(raw json.RawMessage) []string {
 	return requestShape(request)
 }
 
+// requestShape builds bounded structural diagnostics from decoded modules,
+// retaining sanitized selector names but never operation argument values.
 func requestShape(request map[string]json.RawMessage) []string {
 	var method string
 	_ = json.Unmarshal(request["method"], &method)
@@ -58,6 +60,8 @@ func requestShape(request map[string]json.RawMessage) []string {
 	return shapes
 }
 
+// selectorShape describes up to eight sanitized selector names or the JSON
+// kind when the selector is not a string or string array.
 func selectorShape(raw json.RawMessage) []string {
 	var one string
 	if json.Unmarshal(raw, &one) == nil {
@@ -104,6 +108,8 @@ func objectKeys(raw json.RawMessage) []string {
 	return labels
 }
 
+// sortedKeys returns deterministic bounded keys, replacing the final slot
+// with a truncation marker when necessary; limit must be positive.
 func sortedKeys(fields map[string]json.RawMessage, limit int) []string {
 	keys := make([]string, 0, len(fields))
 	for key := range fields {
@@ -116,6 +122,8 @@ func sortedKeys(fields map[string]json.RawMessage, limit int) []string {
 	return keys
 }
 
+// shapeLabel removes unsafe identifier text and masks names suggesting
+// credentials before they enter structural diagnostics.
 func shapeLabel(name string) string {
 	switch {
 	case !shapeName.MatchString(name):
@@ -127,6 +135,8 @@ func shapeLabel(name string) string {
 	}
 }
 
+// jsonKind categorizes the leading token for diagnostics without retaining
+// the value; it is not a JSON validator.
 func jsonKind(raw json.RawMessage) string {
 	text := strings.TrimSpace(string(raw))
 	switch {

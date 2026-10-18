@@ -8,6 +8,8 @@ import (
 	"strings"
 )
 
+// callbackVersionCapability advertises native callback version 1.0 only when
+// the application supplies a callback worker.
 func callbackVersionCapability(value bool) string {
 	if value {
 		return "1.0"
@@ -15,6 +17,8 @@ func callbackVersionCapability(value bool) string {
 	return "0"
 }
 
+// callback validates and dispatches one native callback start/stop request.
+// A true return means an HTTP response was written, not that enrollment succeeded.
 func (s *Server) callback(w http.ResponseWriter, request map[string]json.RawMessage) bool {
 	if s.startCallback == nil || len(request) != 2 {
 		return false

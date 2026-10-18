@@ -90,6 +90,8 @@ func stripTopic(topic string) string {
 	return strings.Join(parts, "/")
 }
 
+// findRule selects the first matching exact or prefix topic rule, then checks explicitly
+// recognized vendor basenames.
 func findRule(topic string) (rule, bool) {
 	topic = stripTopic(topic)
 	for _, candidate := range rules {

@@ -60,6 +60,8 @@ func EncodeResponseStrings(data json.RawMessage) (json.RawMessage, error) {
 	return codePassthroughObject(data, true)
 }
 
+// codePassthroughObject transforms string values in exactly one bounded JSON
+// object, preserving numeric literals and rejecting extra trailing JSON.
 func codePassthroughObject(data json.RawMessage, encode bool) (json.RawMessage, error) {
 	if len(data) > MaxApplicationFrameSize {
 		return nil, ErrFrameTooLarge
@@ -90,6 +92,8 @@ func codePassthroughObject(data json.RawMessage, encode bool) (json.RawMessage, 
 	return coded, nil
 }
 
+// codePassthroughValue recursively transforms string leaves in place, limiting
+// nesting to 64 levels and leaving object keys and non-string scalars unchanged.
 func codePassthroughValue(value *any, encode bool, depth int) error {
 	if depth > 64 {
 		return ErrInvalidFrame
@@ -122,6 +126,8 @@ func codePassthroughValue(value *any, encode bool, depth int) error {
 	return nil
 }
 
+// encodePassthroughString applies the firmware's byte-wise percent encoder,
+// including its lowercase hex escapes and encodeURIComponent safe alphabet.
 func encodePassthroughString(value string) string {
 	// libjson's encoder preserves the encodeURIComponent alphabet and emits
 	// lowercase hexadecimal escapes; it does not encode object member names.

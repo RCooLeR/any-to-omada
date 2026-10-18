@@ -24,6 +24,8 @@ import (
 	"github.com/pion/rtp"
 )
 
+// fixture serves two synthetic video/audio profiles and exposes connection,
+// request and failure controls for upstream lifecycle tests.
 type fixture struct {
 	server    *gortsplib.Server
 	streams   map[string]*gortsplib.ServerStream
@@ -37,6 +39,8 @@ type fixture struct {
 	wg        sync.WaitGroup
 }
 
+// newFixture starts a loopback RTSP source with one packet producer shared by
+// both profiles and registers cleanup for its streams and connections.
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	f := &fixture{streams: map[string]*gortsplib.ServerStream{}, conns: map[*gortsplib.ServerConn]bool{}, describes: map[string]int{}, done: make(chan struct{})}
@@ -94,16 +98,22 @@ func newFixture(t *testing.T) *fixture {
 	return f
 }
 
+// OnConnOpen retains accepted connections so tests can force upstream outages.
 func (f *fixture) OnConnOpen(ctx *gortsplib.ServerHandlerOnConnOpenCtx) {
 	f.mu.Lock()
 	f.conns[ctx.Conn] = true
 	f.mu.Unlock()
 }
+
+// OnConnClose removes completed connections from the outage-control set.
 func (f *fixture) OnConnClose(ctx *gortsplib.ServerHandlerOnConnCloseCtx) {
 	f.mu.Lock()
 	delete(f.conns, ctx.Conn)
 	f.mu.Unlock()
 }
+
+// OnDescribe injects a configured failure or authenticates and counts access
+// to the requested synthetic profile.
 func (f *fixture) OnDescribe(ctx *gortsplib.ServerHandlerOnDescribeCtx) (*base.Response, *gortsplib.ServerStream, error) {
 	f.requests.Add(1)
 	if code := f.status.Load(); code != 0 {
@@ -121,13 +131,18 @@ func (f *fixture) OnDescribe(ctx *gortsplib.ServerHandlerOnDescribeCtx) (*base.R
 	}
 	return &base.Response{StatusCode: base.StatusOK}, stream, nil
 }
+
+// OnSetup supplies the selected synthetic stream for an authenticated test client.
 func (f *fixture) OnSetup(ctx *gortsplib.ServerHandlerOnSetupCtx) (*base.Response, *gortsplib.ServerStream, error) {
 	return &base.Response{StatusCode: base.StatusOK}, f.streams[ctx.Path], nil
 }
+
+// OnPlay allows readers to join the fixture's already running packet producer.
 func (f *fixture) OnPlay(*gortsplib.ServerHandlerOnPlayCtx) (*base.Response, error) {
 	return &base.Response{StatusCode: base.StatusOK}, nil
 }
 
+// config pins relay endpoints to this fixture and shortens retries for tests.
 func (f *fixture) config() Config {
 	host, port, _ := net.SplitHostPort(f.server.NetListener().Addr().String())
 	number, _ := strconv.Atoi(port)
@@ -136,6 +151,7 @@ func (f *fixture) config() Config {
 		ConnectTimeout: time.Second, ReadTimeout: 2 * time.Second, RetryMin: 50 * time.Millisecond, RetryMax: 100 * time.Millisecond}
 }
 
+// startProxy starts a relay under the test context and closes it during cleanup.
 func startProxy(t *testing.T, cfg Config) *Server {
 	t.Helper()
 	s, err := New(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
@@ -149,6 +165,7 @@ func startProxy(t *testing.T, cfg Config) *Server {
 	return s
 }
 
+// await bounds asynchronous lifecycle assertions to five seconds.
 func await(t *testing.T, fn func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
@@ -160,11 +177,14 @@ func await(t *testing.T, fn func() bool) {
 	}
 }
 
+// receivedPacket retains a detached payload and media kind for relay assertions.
 type receivedPacket struct {
 	kind    description.MediaType
 	payload []byte
 }
 
+// reader starts a downstream TCP viewer and samples detached packets through a
+// bounded channel so a slow test consumer cannot block the RTSP callback.
 func reader(t *testing.T, s *Server, path string) (*gortsplib.Client, *description.Session, <-chan receivedPacket) {
 	t.Helper()
 	u, _ := base.ParseURL("rtsp://" + s.Addr() + path)
@@ -472,17 +492,21 @@ func TestListenerRejectsUnlistedPeer(t *testing.T) {
 	<-done
 }
 
+// peerConn gives an in-memory connection a fixed remote IP for allowlist tests.
 type peerConn struct{ net.Conn }
 
+// RemoteAddr reports the fixture peer independently of the underlying transport.
 func (*peerConn) RemoteAddr() net.Addr {
 	return &net.TCPAddr{IP: net.ParseIP("192.0.2.99"), Port: 1234}
 }
 
+// singleListener injects one prepared connection before accepting real ones.
 type singleListener struct {
 	net.Listener
 	conn net.Conn
 }
 
+// Accept consumes the injected connection once, then delegates to the listener.
 func (l *singleListener) Accept() (net.Conn, error) {
 	if l.conn != nil {
 		conn := l.conn

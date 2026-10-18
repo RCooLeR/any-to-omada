@@ -33,6 +33,7 @@ type Keys struct {
 // Client holds one exchange. Finish consumes it even on failure. Its methods
 // synchronize state access; Destroy releases state when a transport aborts.
 type Client struct {
+	// mu guards the single-use exchange state, including key derivation and clearing.
 	mu     sync.Mutex
 	ready  bool
 	used   bool
@@ -50,6 +51,8 @@ func NewClient(publicData []byte, password string) (*Client, []byte, error) {
 	return newClient(publicData, password, rand.Reader)
 }
 
+// newClient initializes one bounded PAKE exchange using the supplied entropy reader;
+// password-derived temporary buffers are cleared before returning.
 func newClient(publicData []byte, password string, random io.Reader) (*Client, []byte, error) {
 	iterations, memoryKiB, err := parameters(publicData)
 	if err != nil {
@@ -84,6 +87,8 @@ func newClient(publicData []byte, password string, random io.Reader) (*Client, [
 	return c, append([]byte(nil), c.public[:]...), nil
 }
 
+// parameters validates the advertised Argon2id parameters before allocation and
+// returns iterations and memory in KiB, converting the wire byte count.
 func parameters(publicData []byte) (uint32, uint32, error) {
 	if len(publicData) != publicDataSize {
 		return 0, 0, errors.New("spakeee public parameters must contain 36 bytes")
@@ -99,6 +104,8 @@ func parameters(publicData []byte) (uint32, uint32, error) {
 	return uint32(iterations), uint32(memory / 1024), nil
 }
 
+// randomScalar draws a nonzero scalar with the protocol's unclamped bit mask;
+// repeated zero entropy is rejected after sixteen attempts.
 func randomScalar(random io.Reader) (*edwards25519.Scalar, error) {
 	var wide [64]byte
 	defer clear(wide[:])
@@ -170,6 +177,8 @@ func (c *Client) Finish(response []byte, clientID, serverID string) ([]byte, Key
 	return confirmation[:], keys, nil
 }
 
+// deriveKeys binds the exact identities and exchanged points into the BLAKE2b
+// transcript, deriving directional keys and server/client confirmations.
 func deriveKeys(clientID, serverID string, x, y, z, hK, v []byte) (Keys, [32]byte, [32]byte, error) {
 	transcript := make([]byte, 0, 3+len(clientID)+len(serverID)+160)
 	transcript = append(transcript, 1, byte(len(clientID)))
@@ -212,6 +221,7 @@ func (c *Client) Destroy() {
 	c.clearState()
 }
 
+// clearState clears retained exchange material; the caller must hold c.mu.
 func (c *Client) clearState() {
 	c.ready = false
 	c.x = edwards25519.Scalar{}

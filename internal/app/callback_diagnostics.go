@@ -26,6 +26,8 @@ func callbackMethodLabel(method string) string {
 	return "?"
 }
 
+// callbackFrameMetadata retains only allowlisted method names, JSON shapes, lengths, IDs,
+// and error codes for bounded diagnostics.
 type callbackFrameMetadata struct {
 	contentType   omadalink.ContentType
 	bodyBytes     int
@@ -40,6 +42,8 @@ type callbackFrameMetadata struct {
 	responseSet   bool
 }
 
+// callbackReadFailure captures the failing reader stage and last safe frame metadata without
+// retaining a response payload.
 type callbackReadFailure struct {
 	err       error
 	stage     string
@@ -89,6 +93,8 @@ func (c *callback) readCallback(ctx context.Context, conn net.Conn, messages cha
 	}
 }
 
+// callbackMetadata extracts diagnostic fields without copying arbitrary recorder strings or
+// management content into logs.
 func callbackMetadata(frame omadalink.Frame) callbackFrameMetadata {
 	result := callbackFrameMetadata{contentType: frame.ContentType, bodyBytes: len(frame.Body), method: "unknown"}
 	var fields map[string]json.RawMessage
@@ -116,6 +122,8 @@ func callbackMetadata(frame omadalink.Frame) callbackFrameMetadata {
 	return result
 }
 
+// fields converts safe frame metadata to structured logger fields, omitting IDs and error
+// codes that were absent or invalid.
 func (m callbackFrameMetadata) fields() []any {
 	fields := []any{"content_type", m.contentType, "body_bytes", m.bodyBytes, "method", m.method,
 		"request_data_kind", m.requestKind, "response_data_kind", m.responseKind}
@@ -131,6 +139,8 @@ func (m callbackFrameMetadata) fields() []any {
 	return fields
 }
 
+// callbackJSONKind classifies a raw field by its first nonspace byte for diagnostics; it
+// does not validate the JSON value.
 func callbackJSONKind(value json.RawMessage) string {
 	value = bytes.TrimSpace(value)
 	if len(value) == 0 {
@@ -152,6 +162,8 @@ func callbackJSONKind(value json.RawMessage) string {
 	}
 }
 
+// logCallbackReadFailure logs framing and timing evidence through fixed labels instead of
+// underlying error text or peer payloads.
 func (c *callback) logCallbackReadFailure(failure callbackReadFailure, heartbeatsSent uint64, unanswered int) {
 	fields := []any{"read_stage", failure.stage, "failure_kind", callbackFailureKind(failure.err),
 		"frames_received", failure.frames, "elapsed_ms", failure.elapsed.Milliseconds(),
@@ -183,6 +195,8 @@ func (c *callback) logCallbackReadFailure(failure callbackReadFailure, heartbeat
 	c.logger.Warn("native callback read failed", fields...)
 }
 
+// callbackFailureKind reduces reader errors to a fixed diagnostic category without exposing
+// their message text.
 func callbackFailureKind(err error) string {
 	var typeError *json.UnmarshalTypeError
 	var networkError net.Error

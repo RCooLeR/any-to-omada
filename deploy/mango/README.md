@@ -1,6 +1,10 @@
-# Mango / OpenWrt routing reference
+# OpenWrt routing reference: Mango example
 
 Mango can provide virtual-camera addresses and kernel DNAT while `any-to-omada` runs on a NAS or another host. It does not run the translator, manipulate event payloads, decode video or store camera data.
+
+Other suitable OpenWrt routers can perform the same role. Mango is the tested reference hardware; adapt addresses, interfaces and firewall integration for the target device and ensure its forwarding capacity suits the camera traffic.
+
+**An external router is optional.** A Linux/NAS host can own the virtual IPs and publish each IP's 443/554 to distinct listener pairs in one Docker bridge container. A host binary can bind directly to those IPs instead. See [networking and virtual IPs](../../docs/networking.md) for these alternatives; use the profiles below when a separate routing device fits your topology.
 
 **These scripts are fixed deployment reference profiles, not a general-purpose router installer.** They encode particular addresses, interfaces, existing masquerade assumptions and ownership markers. Review the entire chosen script, adapt all constants and rerun its tests for your topology before applying it. Documentation-only IPs in the root example are deliberately not the script's addresses.
 

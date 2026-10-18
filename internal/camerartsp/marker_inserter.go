@@ -21,6 +21,8 @@ type markerInserter struct {
 	offset uint16
 }
 
+// newMarkerInserter returns nil when markers are disabled or the codec cannot
+// carry the supported H.264/H.265 marker units.
 func newMarkerInserter(codec string, state func() tpmarker.State) *markerInserter {
 	if state == nil || (codec != "H264" && codec != "H265") {
 		return nil

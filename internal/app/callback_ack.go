@@ -11,6 +11,8 @@ const (
 	eventAckTimeout     = 30 * time.Second
 )
 
+// pendingEventAck records the wire event and send time while its application acknowledgement
+// is outstanding.
 type pendingEventAck struct {
 	event omadalink.Event
 	sent  time.Time
@@ -19,10 +21,13 @@ type pendingEventAck struct {
 // pendingEventAcks belongs to one application loop; it never survives reconnect.
 type pendingEventAcks struct{ events map[uint16]pendingEventAck }
 
+// newPendingEventAcks starts an empty acknowledgement set for one application connection.
 func newPendingEventAcks() *pendingEventAcks {
 	return &pendingEventAcks{events: make(map[uint16]pendingEventAck)}
 }
 
+// expire retires writes unacknowledged for 30 seconds and returns their count for status
+// accounting.
 func (p *pendingEventAcks) expire(now time.Time) int {
 	removed := 0
 	for id, event := range p.events {
@@ -34,6 +39,8 @@ func (p *pendingEventAcks) expire(now time.Time) int {
 	return removed
 }
 
+// nextAvailableID advances within the native message-ID range until it avoids all
+// outstanding event IDs.
 func (p *pendingEventAcks) nextAvailableID(id uint16) uint16 {
 	for {
 		if _, used := p.events[id]; !used {
@@ -43,6 +50,8 @@ func (p *pendingEventAcks) nextAvailableID(id uint16) uint16 {
 	}
 }
 
+// acknowledgeEvent consumes a matching pending response only when its outer and, on outer
+// success, notify_event error codes are present.
 func (c *callback) acknowledgeEvent(attempt *callbackAttempt, pending *pendingEventAcks, message callbackMessage) bool {
 	event, ok := pending.events[message.ID]
 	if !ok || !message.outerErrorPresent || message.outerErrorCode == 0 && message.notifyErrorCode == nil {

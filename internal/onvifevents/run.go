@@ -21,6 +21,7 @@ import (
 
 const protocol = "onvif"
 
+// timings bounds subscription setup, pulls, renewal, retry pacing, and stale detection lifetime.
 type timings struct {
 	pull, termination, renew, request time.Duration
 	// idle is the minimum spacing of empty pulls and of retries after a failure.
@@ -42,6 +43,8 @@ func Run(ctx context.Context, device capture.Device, sink capture.Sink) error {
 	return run(ctx, device, sink, defaultTimings)
 }
 
+// notification decodes the ONVIF topic and nested property message while retaining native
+// timestamps, source items, and data items.
 type notification struct {
 	Topic   string `xml:"Topic"`
 	Message struct {
@@ -54,6 +57,7 @@ type notification struct {
 	} `xml:"Message"`
 }
 
+// items decodes ONVIF SimpleItem name/value attributes before their bounds are applied by values.
 type items struct {
 	SimpleItem []struct {
 		Name  string `xml:"Name,attr"`
@@ -79,6 +83,8 @@ func (i items) values() map[string]string {
 	return result
 }
 
+// run discovers a source inventory, owns one PullPoint subscription, and emits state
+// transitions with bounded retries and unsubscribe cleanup.
 func run(ctx context.Context, device capture.Device, sink capture.Sink, t timings) (runErr error) {
 	client := onvifsoap.New(device.Host, device.NativePort, device.Username, device.Password, t.pull+t.request)
 	defer client.Close()
@@ -223,6 +229,7 @@ func run(ctx context.Context, device capture.Device, sink capture.Sink, t timing
 	}
 }
 
+// pause spaces pulls and retries without delaying cancellation of the owning capture context.
 func pause(ctx context.Context, duration time.Duration) error {
 	timer := time.NewTimer(duration)
 	defer timer.Stop()
@@ -361,11 +368,13 @@ func handle(deviceID string, sink capture.Sink, message notification, lenses len
 	return transition(base, active, wanted)
 }
 
+// interval pairs a canonical event code with the explicit object classes carried by its opening notification.
 type interval struct {
 	code    string
 	classes []string
 }
 
+// detection holds the active intervals for one source/rule key and its most recent refresh time.
 type detection struct {
 	intervals []interval
 	updated   time.Time
@@ -376,6 +385,8 @@ type detection struct {
 // end never arrives is closed after a bound.
 type states map[string]*detection
 
+// open refreshes an existing detection or records a new code once, refusing new detection
+// keys after the 256-key bound.
 func (s states) open(key string, wanted interval, now time.Time) bool {
 	tracked := s[key]
 	if tracked == nil {
@@ -395,6 +406,7 @@ func (s states) open(key string, wanted interval, now time.Time) bool {
 	return true
 }
 
+// close removes one detection and returns its intervals so callers can emit exactly the matching Stop edges.
 func (s states) close(key string) []interval {
 	tracked := s[key]
 	delete(s, key)
@@ -450,6 +462,8 @@ func (s states) expire(now time.Time, limit time.Duration) []map[string]any {
 	return result
 }
 
+// lenses preserves the discovered source order and configuration-token aliases used to route
+// events to physical lenses.
 type lenses struct {
 	sources []string
 	configs map[string]string
@@ -542,6 +556,7 @@ func (l lenses) index(source map[string]string, alarmItem string) int {
 	return index
 }
 
+// clean trims journal text to 128 bytes and removes ASCII control characters.
 func clean(value string) string {
 	value = strings.TrimSpace(value)
 	if len(value) > 128 {

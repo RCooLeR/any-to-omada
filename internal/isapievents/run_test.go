@@ -19,16 +19,19 @@ import (
 	"github.com/RCooLeR/any-to-omada/internal/capture"
 )
 
+// write stores one adapter sink call for checking journal kinds and normalized event content.
 type write struct {
 	protocol, kind string
 	data           any
 }
 
+// sink records adapter writes under a mutex for concurrent stream and assertion access.
 type sink struct {
 	mu     sync.Mutex
 	writes []write
 }
 
+// Write records one adapter output without blocking on assertion-side notifications.
 func (s *sink) Write(_, protocol, kind string, data any) error {
 	s.mu.Lock()
 	s.writes = append(s.writes, write{protocol, kind, data})
@@ -36,6 +39,7 @@ func (s *sink) Write(_, protocol, kind string, data any) error {
 	return nil
 }
 
+// events returns stable summaries of normalized edges while holding the write lock.
 func (s *sink) events() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -51,6 +55,7 @@ func (s *sink) events() []string {
 	return result
 }
 
+// has reports whether the adapter has emitted a record of the requested kind.
 func (s *sink) has(kind string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -69,6 +74,7 @@ func xmlAlert(eventType, state, channel, extra string) string {
 		`<eventType>` + eventType + `</eventType><eventState>` + state + `</eventState><eventDescription>x</eventDescription>` + extra + `</EventNotificationAlert>`
 }
 
+// hik emulates a local Digest-protected ISAPI camera with controllable identity failures and multipart alerts.
 type hik struct {
 	server     *httptest.Server
 	parts      chan string
@@ -85,6 +91,8 @@ func newHik(t *testing.T) *hik {
 	return h
 }
 
+// authorized independently verifies fixture Digest values and rejects quoted fields
+// unsupported by the simulated camera.
 func (h *hik) authorized(r *http.Request) bool {
 	fields := map[string]string{}
 	for _, match := range regexp.MustCompile(`(\w+)=(?:"([^"]*)"|([^, ]+))`).FindAllStringSubmatch(r.Header.Get("Authorization"), -1) {
@@ -98,6 +106,7 @@ func (h *hik) authorized(r *http.Request) bool {
 	return !h.reject && fields["uri"] == r.URL.Path && fields["response"] == hash(ha1+":n1:"+fields["nc"]+":"+fields["cnonce"]+":auth:"+ha2)
 }
 
+// serve handles fixture identity and alert-stream requests, terminating a stream when its request is cancelled.
 func (h *hik) serve(w http.ResponseWriter, r *http.Request) {
 	if !h.authorized(r) {
 		w.Header().Set("WWW-Authenticate", `Digest realm="hik", nonce="n1", qop="auth"`)
@@ -139,6 +148,7 @@ func part(contentType, body string) string {
 	return "--boundary\r\nContent-Type: " + contentType + "\r\nContent-Length: " + strconv.Itoa(len(body)) + "\r\n\r\n" + body + "\r\n"
 }
 
+// device exposes the local fixture endpoint and test-only account to the production adapter.
 func (h *hik) device() capture.Device {
 	host, port, _ := net.SplitHostPort(h.server.Listener.Addr().String())
 	number, _ := strconv.Atoi(port)

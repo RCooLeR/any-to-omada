@@ -35,7 +35,7 @@ Define each physical camera once in `sources`. Each verified lens gets a separat
 | `cameras[].verified`, `lens` | Record a checked lens mapping. An enabled camera requires an enabled source, `verified: true`, and a lens other than `unverified`. Use `channel` when the mapping is known without claiming fixed or PTZ mechanics. |
 | `cameras[].main_url`, `sub_url` | Distinct, credential-free RTSP URLs on the source IP and a common explicit port. |
 | `cameras[].advertised_ip`, `recorder_ip` | Virtual address and logical recorder identity. These fields neither create routing nor restrict clients. |
-| `cameras[].management_address`, `rtsp_address` | Distinct listeners per virtual camera; bind `0.0.0.0` inside bridge-mode containers. |
+| `cameras[].management_address`, `rtsp_address` | Distinct IP:port listeners per virtual camera. Use `0.0.0.0` with distinct internal ports in bridge-mode containers, or bind each host virtual IP directly. |
 | `cameras[].allowed_transport_peers` | Optional allowlist of up to eight exact IPv4 addresses. Omitted or empty accepts every source IP, including a router's translated peer. |
 | `cameras[].account` | Recorder-facing HTTPS/RTSP account. It may reuse the physical account if desired. |
 | `cameras[].tls_certificate_file`, `tls_key_file` | Operator-supplied certificate/key. The virtual IP must appear in the certificate SAN. |
@@ -43,6 +43,8 @@ Define each physical camera once in `sources`. Each verified lens gets a separat
 Keep passwords out of JSON and stream URLs. Use `password_file` or `password_env` references for both upstream and virtual accounts. Local binary configurations need host paths; container configurations need paths visible inside the container.
 
 Every lens needs a unique virtual IP and listener pair. The schema accepts up to 32 sources and 32 virtual cameras; actual capacity depends on source/NVR limits, bandwidth and host resources. The [six-endpoint](../deploy/nas/all-six.md) and [expansion](../deploy/nas/additional-six.md) examples show how to extend a deployment.
+
+An external router is optional. [Networking and virtual IPs](networking.md) explains host IP aliases, per-IP Docker publishing, direct bindings and OpenWrt routing. The same port can be used on different explicit bind IPs; a wildcard bind on that port overlaps those listeners.
 
 ## Source adapters
 

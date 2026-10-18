@@ -69,6 +69,7 @@ func TestClientCountsExcludeSetupUntilPlay(t *testing.T) {
 	awaitClientCounts(t, s, 0, 0)
 }
 
+// assertClientCounts checks both PLAY-session and distinct-peer counters.
 func assertClientCounts(t *testing.T, s *Server, wantStreams, wantIPs int) {
 	t.Helper()
 	streams, ips := s.ClientCounts()
@@ -77,6 +78,7 @@ func assertClientCounts(t *testing.T, s *Server, wantStreams, wantIPs int) {
 	}
 }
 
+// awaitClientCounts waits for asynchronous session changes to reach both targets.
 func awaitClientCounts(t *testing.T, s *Server, wantStreams, wantIPs int) {
 	t.Helper()
 	await(t, func() bool {

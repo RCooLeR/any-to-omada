@@ -198,11 +198,14 @@ func TestInvalidEncodingAndNoPayloadInErrors(t *testing.T) {
 	}
 }
 
+// singleByteReader fragments a frame into bytes and records any read beyond
+// its boundary, modeling a peer blocked until the caller replies.
 type singleByteReader struct {
 	data        []byte
 	readPastEnd bool
 }
 
+// Read yields one byte or marks an attempted read past the supplied frame.
 func (r *singleByteReader) Read(p []byte) (int, error) {
 	if len(r.data) == 0 {
 		r.readPastEnd = true

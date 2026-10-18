@@ -32,12 +32,16 @@ func readHandshakeMessage(reader *bufio.Reader, contentType ContentType, step, m
 	return readHandshakeMessageTracked(reader, contentType, step, minBytes, maxBytes, &handshakeProgress{})
 }
 
+// syntheticPAKE isolates handshake transport tests from expensive key
+// derivation while checking exchange shape and cleanup.
 type syntheticPAKE struct {
 	keys      spakeee.Keys
 	finishErr error
 	destroyed bool
 }
 
+// Finish validates the expected synthetic exchange and returns configured keys
+// and failure together with a fixed confirmation.
 func (p *syntheticPAKE) Finish(response []byte, clientID, serverID string) ([]byte, spakeee.Keys, error) {
 	if len(response) != 64 || clientID != "VIGI-IPC" || serverID != "VIGI-NVR" {
 		return nil, spakeee.Keys{}, errors.New("unexpected test exchange")
@@ -45,25 +49,31 @@ func (p *syntheticPAKE) Finish(response []byte, clientID, serverID string) ([]by
 	return bytes.Repeat([]byte{6}, 32), p.keys, p.finishErr
 }
 
+// Destroy records cleanup so tests can verify aborted exchanges release state.
 func (p *syntheticPAKE) Destroy() { p.destroyed = true }
 
+// deadlineConn records the most recent deadline under a mutex while retaining
+// the underlying connection's deadline behavior.
 type deadlineConn struct {
 	net.Conn
 	mu       sync.Mutex
 	deadline time.Time
 }
 
+// readStartedConn signals the first transport read once for cancellation tests.
 type readStartedConn struct {
 	net.Conn
 	once    sync.Once
 	started chan struct{}
 }
 
+// Read signals that I/O has started before allowing the underlying read to block.
 func (c *readStartedConn) Read(data []byte) (int, error) {
 	c.once.Do(func() { close(c.started) })
 	return c.Conn.Read(data)
 }
 
+// SetDeadline records the deadline before forwarding it to the connection.
 func (c *deadlineConn) SetDeadline(deadline time.Time) error {
 	c.mu.Lock()
 	c.deadline = deadline

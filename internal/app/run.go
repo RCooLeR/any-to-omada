@@ -29,6 +29,8 @@ import (
 // Version is the service version.
 const Version = "0.3.0"
 
+// camera owns the listeners, media relay, native callback, and optional physical controls
+// for one configured virtual lens.
 type camera struct {
 	cfg      config.Camera
 	front    *omadafront.Server
@@ -41,6 +43,8 @@ type camera struct {
 	relay    *onvifoutput.Relay
 }
 
+// cameraStatus combines virtual identity and component snapshots; native readiness describes
+// callback transport rather than verified recorder enrollment.
 type cameraStatus struct {
 	ID                  string             `json:"id"`
 	Enabled             bool               `json:"enabled"`
@@ -333,10 +337,14 @@ func compatibility(cfg config.Compatibility) omadafront.Compatibility {
 	return result
 }
 
+// httpServer creates bounded HTTP listeners and suppresses default error logs that could
+// disclose peer-controlled details.
 func httpServer(handler http.Handler) *http.Server {
 	return &http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 10 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16 << 10, ErrorLog: log.New(io.Discard, "", 0)}
 }
 
+// writeJSON sends a noncacheable JSON control response; client disconnects do not propagate
+// into daemon lifecycle errors.
 func writeJSON(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")

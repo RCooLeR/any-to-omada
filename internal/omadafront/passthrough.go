@@ -6,8 +6,9 @@ import (
 )
 
 // Passthrough dispatches an already URL-decoded management object received over
-// the authenticated native recorder callback. It creates no HTTP session and
-// never forwards settings or control writes to a physical camera. The caller
+// the authenticated native recorder callback. It creates no HTTP session.
+// Image, detection and time writes change virtual state only; an explicitly
+// configured PTZ controller can send physical control requests. The caller
 // must complete callback authentication before using this entry point.
 func (s *Server) Passthrough(raw json.RawMessage) json.RawMessage {
 	response := map[string]any{"error_code": unsupportedCode}

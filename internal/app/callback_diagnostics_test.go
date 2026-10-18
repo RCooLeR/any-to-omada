@@ -148,6 +148,8 @@ func diagnosticLogRows(t *testing.T, data []byte) []map[string]any {
 	return rows
 }
 
+// callbackDeadlineSignal signals when the reader reaches a selected read-deadline update,
+// allowing deterministic diagnostic assertions.
 type callbackDeadlineSignal struct {
 	net.Conn
 	target int
@@ -155,6 +157,8 @@ type callbackDeadlineSignal struct {
 	ready  chan struct{}
 }
 
+// SetReadDeadline delegates to the pipe and signals the selected call before the callback
+// reader continues.
 func (c *callbackDeadlineSignal) SetReadDeadline(deadline time.Time) error {
 	err := c.Conn.SetReadDeadline(deadline)
 	c.calls++

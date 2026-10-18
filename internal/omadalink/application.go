@@ -140,6 +140,8 @@ func ReadApplicationFrame(r *bufio.Reader) (_ Frame, err error) {
 	return Frame{ContentType: contentType, Body: body}, nil
 }
 
+// applicationType accepts only the observed post-TLS envelope names, including
+// the firmware's misspelled event type.
 func applicationType(value ContentType) bool {
 	return value == ApplicationRequest || value == ApplicationResponse ||
 		value == ApplicationDeclaration || value == ApplicationEvent || value == ApplicationAuthRequest

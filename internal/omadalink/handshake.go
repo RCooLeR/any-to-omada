@@ -31,6 +31,8 @@ var (
 	ErrPeerCertificate = errors.New("recorder certificate does not match callback trust")
 )
 
+// handshakeMessage represents a pre-TLS step; pointer fields distinguish
+// missing step/error fields from explicit zero values.
 type handshakeMessage struct {
 	Step      *int   `json:"step"`
 	Data      string `json:"data"`
@@ -38,7 +40,9 @@ type handshakeMessage struct {
 }
 
 type pakeClient interface {
+	// Finish verifies the recorder proof and consumes the exchange state.
 	Finish([]byte, string, string) ([]byte, spakeee.Keys, error)
+	// Destroy releases retained exchange state after completion or abort.
 	Destroy()
 }
 
@@ -55,6 +59,8 @@ func Handshake(ctx context.Context, conn net.Conn, authCode string) (*tls.Conn, 
 	})
 }
 
+// handshake owns the connection through PAKE and TLS, clearing its temporary
+// deadline on success and closing it on failure; factory supplies the PAKE engine.
 func handshake(ctx context.Context, conn net.Conn, authCode string, factory pakeFactory) (_ *tls.Conn, err error) {
 	progress := &handshakeProgress{stage: stageValidateRegistration, details: HandshakeDiagnostics{Reason: "stage_failed", PrefixCategory: "not_read", OfferVersion: "not_read"}}
 	defer func() {
@@ -137,6 +143,8 @@ func handshake(ctx context.Context, conn net.Conn, authCode string, factory pake
 	return secured, nil
 }
 
+// exchangeHandshake executes the ordered native negotiation and PAKE exchange,
+// then decrypts recorder certificates using the PAKE-derived keys after proof verification.
 func exchangeHandshake(ctx context.Context, reader *bufio.Reader, writer io.Writer, authCode string, factory pakeFactory, progress *handshakeProgress) ([]*x509.Certificate, error) {
 	progress.stage = stageReadVersion
 	version, err := readHandshakeMessageTracked(reader, AlgorithmVersion, 1, 1, 64, progress)
@@ -209,6 +217,8 @@ func exchangeHandshake(ctx context.Context, reader *bufio.Reader, writer io.Writ
 	return decryptCertificates(encrypted, keys)
 }
 
+// validAuthCode accepts a nonempty printable ASCII callback credential within
+// the observed 64-byte limit.
 func validAuthCode(value string) bool {
 	if len(value) == 0 || len(value) > 64 {
 		return false
@@ -221,6 +231,8 @@ func validAuthCode(value string) bool {
 	return true
 }
 
+// readHandshakeMessageTracked validates one expected step and decoded payload
+// size, recording only fixed labels and public negotiation metadata on failure.
 func readHandshakeMessageTracked(reader *bufio.Reader, contentType ContentType, step, minBytes, maxBytes int, progress *handshakeProgress) ([]byte, error) {
 	progress.details.Reason = "frame_read"
 	progress.details.PeerStepPresent, progress.details.PeerErrorCodePresent = false, false
@@ -280,6 +292,8 @@ func readHandshakeMessageTracked(reader *bufio.Reader, contentType ContentType, 
 	return data, nil
 }
 
+// writeHandshakeMessage emits one base64-encoded camera step and drains short
+// writes; an invalid write count or transport failure aborts the exchange.
 func writeHandshakeMessage(writer io.Writer, contentType ContentType, step int, data []byte) error {
 	zero := 0
 	body, err := json.Marshal(handshakeMessage{Step: &step, ErrorCode: &zero, Data: base64.StdEncoding.EncodeToString(data)})
@@ -300,6 +314,8 @@ func writeHandshakeMessage(writer io.Writer, contentType ContentType, step int, 
 	return nil
 }
 
+// decryptCertificates derives the protocol's mixed directional AES key and IV,
+// decrypts the bounded CBC payload, and clears temporary key/plaintext buffers.
 func decryptCertificates(encrypted []byte, keys spakeee.Keys) ([]*x509.Certificate, error) {
 	if len(encrypted) == 0 || len(encrypted) > maxCertificateBytes || len(encrypted)%aes.BlockSize != 0 {
 		return nil, fmt.Errorf("%w: encrypted certificate size", ErrHandshake)
@@ -321,6 +337,8 @@ func decryptCertificates(encrypted []byte, keys spakeee.Keys) ([]*x509.Certifica
 	return parseCertificates(plain)
 }
 
+// parseCertificates accepts a bounded PEM chain with the observed zero or
+// PKCS#7 termination and rejects arbitrary suffixes or excessive certificates.
 func parseCertificates(plain []byte) ([]*x509.Certificate, error) {
 	if len(plain) == 0 || len(plain) > maxCertificateBytes {
 		return nil, fmt.Errorf("%w: certificate size", ErrHandshake)
@@ -362,6 +380,8 @@ func parseCertificates(plain []byte) ([]*x509.Certificate, error) {
 	return certificates, nil
 }
 
+// allBytes checks padding bytes for an exact repeated value; an empty slice
+// has no mismatching byte.
 func allBytes(data []byte, expected byte) bool {
 	for _, value := range data {
 		if value != expected {
@@ -371,6 +391,8 @@ func allBytes(data []byte, expected byte) bool {
 	return true
 }
 
+// recorderTLSConfig pins TLS 1.2 trust to certificates from the authenticated
+// PAKE exchange, using the recorder's curve preferences and custom verification.
 func recorderTLSConfig(trusted []*x509.Certificate) *tls.Config {
 	return &tls.Config{
 		MinVersion: tls.VersionTLS12,
@@ -388,6 +410,8 @@ func recorderTLSConfig(trusted []*x509.Certificate) *tls.Config {
 	}
 }
 
+// verifyRecorderCertificate requires an exact authenticated leaf or a valid
+// server chain to a PAKE-authenticated anchor, without name or time matching.
 func verifyRecorderCertificate(peers, trusted []*x509.Certificate) error {
 	if len(peers) == 0 || len(peers) > maxTrustedCertificates || len(trusted) == 0 || len(trusted) > maxTrustedCertificates {
 		return ErrPeerCertificate
@@ -421,6 +445,8 @@ func verifyRecorderCertificate(peers, trusted []*x509.Certificate) error {
 	return nil
 }
 
+// withoutCertificateTime copies a certificate with a broad validity window
+// for the native trust policy, leaving the original certificate unchanged.
 func withoutCertificateTime(certificate *x509.Certificate) *x509.Certificate {
 	clone := *certificate
 	clone.NotBefore = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -428,9 +454,12 @@ func withoutCertificateTime(certificate *x509.Certificate) *x509.Certificate {
 	return &clone
 }
 
+// bufferedConn preserves bytes read ahead during native negotiation so TLS
+// consumes them before reading further from the underlying connection.
 type bufferedConn struct {
 	net.Conn
 	reader *bufio.Reader
 }
 
+// Read consumes the shared negotiation buffer, retaining read-ahead TLS bytes.
 func (c *bufferedConn) Read(data []byte) (int, error) { return c.reader.Read(data) }

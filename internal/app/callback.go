@@ -19,6 +19,8 @@ import (
 	"github.com/RCooLeR/any-to-omada/internal/tpmarker"
 )
 
+// callbackStatus reports transport and application-authentication state separately from
+// event counters; acknowledgements do not prove recorder history acceptance.
 type callbackStatus struct {
 	State                    string `json:"state"`
 	Registrations            uint64 `json:"registrations"`
@@ -37,6 +39,8 @@ type callbackStatus struct {
 	LastFailure              string `json:"last_failure,omitempty"`
 }
 
+// callbackAttempt owns one recorder registration, its cancellation, and the bounded event
+// queue discarded when that registration is replaced.
 type callbackAttempt struct {
 	registration omadafront.CallbackRequest
 	cancel       context.CancelFunc
@@ -80,6 +84,8 @@ func (c *callback) markerState() tpmarker.State {
 	return tpmarker.State{IntrusionActive: since != 0 && time.Since(time.Unix(0, since)) < maxMarkerAlert}
 }
 
+// configureCredentials derives callback account material before registration; callers must
+// not replace it while a session is running.
 func (c *callback) configureCredentials(username, password string) error {
 	credentials, err := omadalink.NewApplicationCredentials(username, password)
 	if err != nil {
@@ -89,6 +95,8 @@ func (c *callback) configureCredentials(username, password string) error {
 	return nil
 }
 
+// newCallback creates an unregistered worker with a stable locally administered MAC derived
+// from its virtual camera ID.
 func newCallback(ctx context.Context, id, ip string, logger *slog.Logger) *callback {
 	hash := sha256.Sum256([]byte("any-to-omada/local-camera/" + id))
 	var mac [6]byte
@@ -98,6 +106,8 @@ func newCallback(ctx context.Context, id, ip string, logger *slog.Logger) *callb
 		logger: logger, status: callbackStatus{State: "unregistered"}, dial: (&net.Dialer{Timeout: 5 * time.Second}).DialContext}
 }
 
+// register replaces a changed registration, cancels its predecessor, and starts one
+// reconnecting worker; identical registrations are idempotent.
 func (c *callback) register(registration omadafront.CallbackRequest) error {
 	c.mu.Lock()
 	if c.closed || c.ctx.Err() != nil {
@@ -127,6 +137,8 @@ func (c *callback) register(registration omadafront.CallbackRequest) error {
 	return nil
 }
 
+// stop cancels the active registration only when its recorder address and port match the
+// request.
 func (c *callback) stop(ip string, port int) {
 	c.mu.Lock()
 	attempt := c.active
@@ -141,6 +153,8 @@ func (c *callback) stop(ip string, port int) {
 	attempt.cancel()
 }
 
+// close prevents new registrations, cancels the active worker, and waits for all callback
+// attempts to finish.
 func (c *callback) close() {
 	c.mu.Lock()
 	c.closed = true
@@ -165,12 +179,15 @@ func (c *callback) releaseAccountState() {
 	c.intrusionSince.Store(0)
 }
 
+// snapshot copies callback state and counters under the lifecycle mutex.
 func (c *callback) snapshot() callbackStatus {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.status
 }
 
+// update applies a status change only while the attempt still owns the registration; change
+// runs under mu and must not perform I/O.
 func (c *callback) update(attempt *callbackAttempt, change func(*callbackStatus)) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -179,6 +196,8 @@ func (c *callback) update(attempt *callbackAttempt, change func(*callbackStatus)
 	}
 }
 
+// run reconnects a callback with bounded exponential backoff and discards queued live events
+// after a failed session instead of replaying stale alarms.
 func (c *callback) run(ctx context.Context, attempt *callbackAttempt) {
 	backoff := 5 * time.Second
 	for ctx.Err() == nil {
@@ -218,6 +237,8 @@ func (c *callback) run(ctx context.Context, attempt *callbackAttempt) {
 	}
 }
 
+// send translates one source edge and atomically admits its full notification set to the
+// active queue, returning a fixed delivery outcome.
 func (c *callback) send(event cameraevents.Event) string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -270,7 +291,7 @@ func (c *callback) expireAlarms(attempt *callbackAttempt, now time.Time) {
 	c.commitAlarms(candidate, wires)
 }
 
-// Source disconnect invalidates intervals whose closing edges can no longer
+// sourceDisconnected invalidates intervals whose closing edges can no longer
 // arrive. The session loop retries their stops if the callback queue is full.
 func (c *callback) sourceDisconnected() {
 	c.mu.Lock()
@@ -284,6 +305,7 @@ func (c *callback) sourceDisconnected() {
 	}
 }
 
+// callbackAddress builds the recorder endpoint from the validated callback registration.
 func callbackAddress(attempt *callbackAttempt) string {
 	return net.JoinHostPort(attempt.registration.IP, strconv.Itoa(attempt.registration.Port))
 }

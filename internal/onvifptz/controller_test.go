@@ -18,6 +18,8 @@ import (
 	"time"
 )
 
+// fakeCamera emulates ONVIF discovery and movement replies while recording
+// operations and allowing tests to inject authentication and stop failures.
 type fakeCamera struct {
 	t              *testing.T
 	server         *httptest.Server
@@ -40,6 +42,7 @@ type fakeCamera struct {
 
 var operationPattern = regexp.MustCompile(`<s:Body><t:([A-Za-z]+)>`)
 
+// newFakeCamera starts a disposable loopback SOAP endpoint with synthetic presets.
 func newFakeCamera(t *testing.T) *fakeCamera {
 	f := &fakeCamera{t: t, password: "camera-secret", bodies: map[string]string{}, zoom: 0.3, presets: map[string]string{"1": "Door", "2": "Yard"}}
 	f.server = httptest.NewServer(http.HandlerFunc(f.serve))
@@ -47,6 +50,8 @@ func newFakeCamera(t *testing.T) *fakeCamera {
 	return f
 }
 
+// controller targets the fake endpoint with a one-second movement watchdog and
+// registers shutdown before the test server is cleaned up.
 func (f *fakeCamera) controller(t *testing.T, password string) *Controller {
 	host, portText, _ := net.SplitHostPort(f.server.Listener.Addr().String())
 	port, _ := strconv.Atoi(portText)
@@ -58,6 +63,7 @@ func (f *fakeCamera) controller(t *testing.T, password string) *Controller {
 	return c
 }
 
+// count snapshots how often an accepted operation reached the fake camera.
 func (f *fakeCamera) count(operation string) int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -70,12 +76,15 @@ func (f *fakeCamera) count(operation string) int {
 	return n
 }
 
+// body returns the latest recorded SOAP payload for operation assertions.
 func (f *fakeCamera) body(operation string) string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.bodies[operation]
 }
 
+// serve checks the expected credential form and emits configurable discovery,
+// movement and preset responses without controlling a physical device.
 func (f *fakeCamera) serve(w http.ResponseWriter, r *http.Request) {
 	data, _ := io.ReadAll(r.Body)
 	body := string(data)
@@ -174,6 +183,7 @@ func (f *fakeCamera) serve(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// validDigest checks the fixture's fixed MD5 challenge against the SOAP request path.
 func (f *fakeCamera) validDigest(r *http.Request) bool {
 	header := r.Header.Get("Authorization")
 	fields := map[string]string{}
@@ -185,6 +195,7 @@ func (f *fakeCamera) validDigest(r *http.Request) bool {
 	return fields["uri"] == r.URL.Path && fields["response"] == hash(ha1+":abc:"+fields["nc"]+":"+fields["cnonce"]+":auth:"+ha2)
 }
 
+// waitFor gives the asynchronous controller at most five seconds to reach a state.
 func waitFor(t *testing.T, condition func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)

@@ -34,6 +34,8 @@ func New(host string, port int, username, password, token string) *Relay {
 // Close releases idle connections.
 func (r *Relay) Close() { r.soap.Close() }
 
+// relayInfo identifies the relay service and its advertised reset duration,
+// validated against the supported bounds without observing physical actuation.
 type relayInfo struct {
 	path, namespace string
 	delay           time.Duration
@@ -42,6 +44,8 @@ type relayInfo struct {
 // Available confirms that the output is advertised with a device-side reset.
 func (r *Relay) Available(ctx context.Context) error { _, err := r.discover(ctx); return err }
 
+// discover selects the configured relay only if it advertises monostable operation with a
+// reset delay between 100 ms and five seconds.
 func (r *Relay) discover(ctx context.Context) (relayInfo, error) {
 	r.soap.SyncClock(ctx)
 	var services struct {

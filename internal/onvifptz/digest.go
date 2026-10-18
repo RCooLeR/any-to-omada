@@ -12,17 +12,24 @@ import (
 // The request URI is a parameter because a camera serves PTZ and media on
 // separate service paths.
 
+// digestChallenge contains the supported, validated HTTP Digest parameters
+// returned by the camera, including its explicit stale-nonce signal.
 type digestChallenge struct {
 	realm, nonce, algorithm, qop, opaque string
 	stale                                bool
 }
 
+// digestNonceKey scopes counters to one server nonce, realm and hash algorithm.
 type digestNonceKey struct{ realm, nonce, algorithm string }
+
+// digestNonceState retains a client nonce and increasing request count for qop=auth.
 type digestNonceState struct {
 	count       uint32
 	clientNonce string
 }
 
+// authorization signs a service URI and advances qop nonce state under authMu.
+// The cache retains at most 64 server nonces and refuses counter rollover.
 func (c *soapClient) authorization(challenge digestChallenge, uri string) (string, error) {
 	if challenge.qop == "" {
 		return digestHeader(c.username, c.password, uri, challenge, 0, ""), nil
@@ -55,6 +62,8 @@ func (c *soapClient) authorization(challenge digestChallenge, uri string) (strin
 	return digestHeader(c.username, c.password, uri, challenge, state.count, state.clientNonce), nil
 }
 
+// parseDigest accepts bounded MD5/SHA-256 challenges with absent qop or auth;
+// duplicate fields, malformed quoting and unsupported modes are rejected.
 func parseDigest(header string) (digestChallenge, error) {
 	var result digestChallenge
 	scheme, rest, ok := strings.Cut(header, " ")
@@ -122,6 +131,8 @@ func parseDigest(header string) (digestChallenge, error) {
 	return result, nil
 }
 
+// digestHeader signs a SOAP POST using validated challenge fields. The camera
+// compatibility form quotes qop, nonce count and algorithm as well as strings.
 func digestHeader(username, password, uri string, c digestChallenge, count uint32, clientNonce string) string {
 	hash := func(value string) string {
 		if c.algorithm == "SHA-256" {
@@ -146,6 +157,7 @@ func digestHeader(username, password, uri string, c digestChallenge, count uint3
 	return fmt.Sprintf(`Digest username="%s", realm="%s", nonce="%s", uri="%s", algorithm="%s", response="%s"%s`, quote(username), quote(c.realm), quote(c.nonce), uri, c.algorithm, response, extra)
 }
 
+// headerText rejects control characters before values enter authentication headers.
 func headerText(value string) bool {
 	for _, c := range value {
 		if c < 32 || c == 127 {

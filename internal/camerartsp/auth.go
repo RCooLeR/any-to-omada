@@ -38,6 +38,8 @@ func (s *Server) authorize(connection *gortsplib.ServerConn, request *base.Reque
 	}}
 }
 
+// nonce creates a random challenge once per downstream connection and reuses it
+// until OnConnClose releases that connection's authentication state.
 func (s *Server) nonce(connection *gortsplib.ServerConn) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -132,6 +134,7 @@ func trackBase(u *base.URL) *base.URL {
 	return result
 }
 
+// md5Hex supplies the lowercase hexadecimal hashes required by RTSP Digest MD5.
 func md5Hex(value string) string {
 	sum := md5.Sum([]byte(value))
 	return hex.EncodeToString(sum[:])
@@ -153,6 +156,7 @@ func (s *Server) logAuthorizationFailure(request *base.Request, reason string) {
 	s.logger.Info("camera RTSP authorization rejected", fields...)
 }
 
+// fixedRTSPMethod limits diagnostic labels to known methods or "other".
 func fixedRTSPMethod(method base.Method) string {
 	switch method {
 	case base.Options, base.Describe, base.Setup, base.Play, base.Pause, base.Teardown, base.GetParameter:
@@ -162,6 +166,8 @@ func fixedRTSPMethod(method base.Method) string {
 	}
 }
 
+// fixedRTSPProfile identifies either public stream, including its track paths,
+// without copying an arbitrary request URL into diagnostics.
 func fixedRTSPProfile(target *base.URL) string {
 	if target != nil {
 		for _, profile := range []string{"stream1", "stream2"} {

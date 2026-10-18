@@ -16,6 +16,8 @@ type AlarmOutput struct {
 	RelayToken string `json:"relay_token"`
 }
 
+// validateControls requires a verified lens and bounds experimental light settings and
+// explicitly selected ONVIF relay identifiers.
 func (v Camera) validateControls(source Source) error {
 	if v.WhiteLight != nil && ((source.Brand != "dahua" && source.Brand != "imou") || v.WhiteLight.Profile < 0 || v.WhiteLight.Profile > 7 || v.WhiteLight.Brightness < 1 || v.WhiteLight.Brightness > 100) {
 		return errors.New("white_light requires a Dahua/Imou source, profile 0..7 and brightness 1..100")

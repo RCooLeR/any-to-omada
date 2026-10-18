@@ -130,6 +130,8 @@ func EncodeDeclaration(id uint16, identity DeclarationIdentity) ([]byte, error) 
 	return encodePostTLS(id, "Declaration", message)
 }
 
+// encodePostTLS serializes a camera-owned application message within the
+// observed send-buffer limit; it rejects recorder-owned IDs and never truncates.
 func encodePostTLS(id uint16, contentType string, message any) ([]byte, error) {
 	if id < FirstMessageID {
 		return nil, ErrInvalidFrame

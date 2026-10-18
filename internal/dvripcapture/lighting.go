@@ -124,11 +124,14 @@ func (l *Lighting) Pulse(ctx context.Context, channel, profile, brightness int, 
 	})
 }
 
+// sameBrightness compares a readback against an integer percentage across the numeric forms
+// accepted by the native decoder.
 func sameBrightness(value any, brightness int) bool {
 	number, ok := brightnessValue(value)
 	return ok && number == brightness
 }
 
+// brightnessValue accepts only finite, integral percentages in the inclusive range 0..100.
 func brightnessValue(value any) (int, bool) {
 	var number float64
 	switch value := value.(type) {
@@ -153,6 +156,7 @@ func brightnessValue(value any) (int, bool) {
 
 type lightingCall func(context.Context, string, any) (map[string]any, error)
 
+// lightingTable reads at most 64 profiles for one zero-based lens and rejects a mismatched echoed channel.
 func lightingTable(ctx context.Context, call lightingCall, channel int) ([]any, error) {
 	if channel < 0 || channel > 65535 {
 		return nil, ErrLightingUnsupported
@@ -185,6 +189,8 @@ func lightingWrite(channel int, table []any) map[string]any {
 	return map[string]any{"name": "Lighting_V2", "channel": channel, "options": []any{}, "table": table}
 }
 
+// whiteLightEntry returns the sole validated WhiteLight entry for a profile, rejecting
+// missing, malformed, or ambiguous entries.
 func whiteLightEntry(table []any, profile int) (map[string]any, error) {
 	if profile < 0 || profile >= len(table) {
 		return nil, ErrLightingUnsupported
@@ -218,6 +224,8 @@ func whiteLightEntry(table []any, profile int) (map[string]any, error) {
 	return selected, nil
 }
 
+// session isolates operator controls from event capture, bounds each RPC, and reconnects a
+// broken stream only for restoration reads.
 func (l *Lighting) session(ctx context.Context, fn func(lightingCall) error) (result error) {
 	if err := ctx.Err(); err != nil {
 		return err

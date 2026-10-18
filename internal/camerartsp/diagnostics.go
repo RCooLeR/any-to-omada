@@ -11,6 +11,8 @@ import (
 	"github.com/bluenviron/gortsplib/v5/pkg/liberrors"
 )
 
+// requestObservation retains the bounded request metadata needed when the
+// corresponding response is logged and its transport header is negotiated.
 type requestObservation struct {
 	method, profile  string
 	nativeEncryption bool
@@ -63,6 +65,8 @@ func (s *Server) OnConnOpen(ctx *gortsplib.ServerHandlerOnConnOpenCtx) {
 	s.logger.Info("camera RTSP connection opened", "peer_ip", peerIP(ctx.Conn))
 }
 
+// peerIP extracts a connection's remote host for logs, returning "unknown"
+// when the connection has no usable network address.
 func peerIP(connection *gortsplib.ServerConn) string {
 	if connection == nil || connection.NetConn() == nil || connection.NetConn().RemoteAddr() == nil {
 		return "unknown"

@@ -296,6 +296,8 @@ func (c *Client) Resolve(address string) (*url.URL, error) {
 	return u, nil
 }
 
+// envelope builds SOAP and optional WS-Addressing headers, adding a fresh UsernameToken
+// nonce and camera-adjusted timestamp when authenticated.
 func (c *Client) envelope(request Request, target *url.URL, authenticated bool) ([]byte, error) {
 	header := ""
 	if request.Addressing {
@@ -328,12 +330,15 @@ func (c *Client) envelope(request Request, target *url.URL, authenticated bool) 
 		`<s:Body><t:` + request.Operation + `>` + request.Content + `</t:` + request.Operation + `></s:Body></s:Envelope>`), nil
 }
 
+// uuid formats random bytes as a version-4 UUID for WS-Addressing message identifiers.
 func uuid(b [16]byte) string {
 	b[6] = b[6]&0x0f | 0x40
 	b[8] = b[8]&0x3f | 0x80
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
 
+// post sends one bounded SOAP exchange and returns status, challenge, and payload without
+// exposing transport errors containing private addresses.
 func (c *Client) post(ctx context.Context, target *url.URL, action string, payload []byte, challenge *httpdigest.Challenge) (int, string, []byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target.String(), bytes.NewReader(payload))
 	if err != nil {
@@ -409,6 +414,7 @@ func (c *Client) ServicePaths(ctx context.Context, namespaces ...string) (map[st
 	return paths, nil
 }
 
+// block starts a 15-minute authentication cooldown to avoid repeatedly submitting rejected camera credentials.
 func (c *Client) block() {
 	c.mu.Lock()
 	// Long enough that a wrong password cannot lock the shared source account.

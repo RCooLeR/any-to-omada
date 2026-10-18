@@ -12,13 +12,19 @@ import (
 // PTZ moves the physical lens behind this virtual camera. Move and Stop must
 // return without network I/O; the other calls are bounded by their context.
 type PTZ interface {
+	// Capability discovers supported physical movement and preset operations.
 	Capability(context.Context) (PTZCapability, error)
+	// Move queues normalized pan/tilt/zoom velocities without blocking on I/O.
 	Move(pan, tilt, zoom float64)
+	// Stop queues termination of physical movement without blocking on I/O.
 	Stop()
+	// Presets reads source positions with recorder-facing integer identifiers.
 	Presets(context.Context) ([]PTZPreset, error)
+	// GotoPreset moves to a previously discovered source position.
 	GotoPreset(context.Context, int) error
 	// SetPreset stores the current position; id 0 lets the camera choose.
 	SetPreset(ctx context.Context, id int, name string) (int, error)
+	// RemovePreset deletes the identified source position.
 	RemovePreset(context.Context, int) error
 }
 
@@ -45,6 +51,8 @@ const ptzCallTimeout = 4 * time.Second
 // pan/tilt, presets and tours.
 var ptzModules = map[string]bool{"ptz": true, "preset": true, "motor": true, "tour": true}
 
+// isPTZRequest recognizes management modules that must pass through the
+// optional physical PTZ controller rather than virtual settings emulation.
 func isPTZRequest(request map[string]json.RawMessage) bool {
 	for module := range request {
 		if ptzModules[module] {
@@ -102,6 +110,8 @@ func (s *Server) ptzRequest(ctx context.Context, method string, request map[stri
 	return nil, false
 }
 
+// ptzOperation validates and dispatches a supported physical PTZ operation.
+// Movement acknowledgement means queued, and native preset.get_preset stays unsupported.
 func (s *Server) ptzOperation(ctx context.Context, operation string, fields map[string]json.RawMessage) (map[string]any, bool) {
 	ok := map[string]any{"error_code": 0}
 	switch operation {
@@ -254,6 +264,8 @@ func (s *Server) ptzPresetOperation(ctx context.Context, fields map[string]json.
 	return nil, false
 }
 
+// ptzResult maps controller failures to the recorder's unsupported code
+// without exposing source-camera error details.
 func (s *Server) ptzResult(err error) map[string]any {
 	if err != nil {
 		return map[string]any{"error_code": unsupportedCode}
@@ -279,6 +291,8 @@ func jsonNumber(raw json.RawMessage) (float64, bool) {
 	return number, err == nil && !math.IsNaN(number) && !math.IsInf(number, 0)
 }
 
+// jsonInteger accepts an integral number or numeric string within inclusive
+// bounds, rejecting fractional and nonfinite values.
 func jsonInteger(raw json.RawMessage, min, max int) (int, bool) {
 	number, valid := jsonNumber(raw)
 	if !valid || number < float64(min) || number > float64(max) || number != math.Trunc(number) {

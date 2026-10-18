@@ -20,17 +20,30 @@ import (
 	"github.com/RCooLeR/any-to-omada/internal/onvifsoap"
 )
 
+// ptzControl is the source controller contract needed by the loopback operator API.
 type ptzControl interface {
+	// Capability discovers supported axes or returns a source availability error.
 	Capability(context.Context) (onvifptz.Capability, error)
+	// Move queues normalized pan, tilt, and zoom velocities; it does not confirm actuation.
 	Move(float64, float64, float64)
+	// Stop queues a priority stop without waiting for a source acknowledgement.
 	Stop()
 }
+
+// lightControl scopes discovery and bounded test pulses to a source lens and profile.
 type lightControl interface {
+	// Available checks the selected zero-based channel and profile without changing settings.
 	Available(context.Context, int, int) error
+	// Pulse applies brightness to the selected channel/profile for a bounded duration,
+	// then attempts restoration even after cancellation or an uncertain activation reply.
 	Pulse(context.Context, int, int, int, time.Duration) error
 }
+
+// relayControl exposes only an explicitly selected relay with a device-side reset timer.
 type relayControl interface {
+	// Available checks advertised relay support without changing its configuration.
 	Available(context.Context) error
+	// Pulse activates the relay once and attempts deactivation after its timer or cancellation.
 	Pulse(context.Context) error
 }
 
@@ -41,6 +54,8 @@ type sourceControlGate struct {
 	blockedUntil time.Time // Accessed only while busy is held.
 }
 
+// cameraControls binds explicitly configured physical control clients to one virtual lens
+// and its shared source admission gate.
 type cameraControls struct {
 	cfg   config.Camera
 	ptz   ptzControl
@@ -49,6 +64,8 @@ type cameraControls struct {
 	gate  *sourceControlGate
 }
 
+// prepareControls wires only opt-in source clients without contacting the camera; output
+// tests for all source lenses share one gate.
 func prepareControls(cam *camera, source config.Source, password string, gate *sourceControlGate) *cameraControls {
 	control := &cameraControls{cfg: cam.cfg, gate: gate}
 	if cam.ptz != nil {
@@ -64,6 +81,8 @@ func prepareControls(cam *camera, source config.Source, password string, gate *s
 	return control
 }
 
+// registerControls adds loopback operator endpoints and returns a shutdown barrier that
+// stops admission before waiting for active controls.
 func registerControls(mux *http.ServeMux, controls map[string]*cameraControls) func() {
 	// Admission closes before Wait, preventing an Add racing an empty Wait.
 	var admission sync.Mutex
@@ -115,6 +134,8 @@ func registerControls(mux *http.ServeMux, controls map[string]*cameraControls) f
 	}
 }
 
+// controlRequest distinguishes omitted axes and duration from zero values for
+// command-specific validation; pulse duration is in milliseconds.
 type controlRequest struct {
 	Command    string   `json:"command"`
 	Pan        *float64 `json:"pan,omitempty"`
@@ -123,6 +144,8 @@ type controlRequest struct {
 	DurationMS *int     `json:"duration_ms,omitempty"`
 }
 
+// handle validates a bounded JSON command, serializes source tests, and applies
+// authentication cooldowns; an explicit PTZ stop bypasses the busy gate.
 func (c *cameraControls) handle(w http.ResponseWriter, r *http.Request) {
 	typeName, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil || typeName != "application/json" {
@@ -200,6 +223,8 @@ func (c *cameraControls) handle(w http.ResponseWriter, r *http.Request) {
 
 var errControlUnsupported = errors.New("control unsupported")
 
+// controlResult maps source outcomes to bounded operator responses and marks failed physical
+// actions as having an unconfirmed final state.
 func controlResult(w http.ResponseWriter, err error) {
 	if err == nil {
 		writeJSON(w, http.StatusOK, map[string]any{"state": "completed"})
@@ -226,6 +251,7 @@ func controlResult(w http.ResponseWriter, err error) {
 	writeJSON(w, http.StatusBadGateway, response)
 }
 
+// number supplies zero velocity for an omitted optional PTZ axis.
 func number(value *float64) float64 {
 	if value == nil {
 		return 0
@@ -233,6 +259,8 @@ func number(value *float64) float64 {
 	return *value
 }
 
+// valid accepts only command-specific fields, axes in -1..1, and white-light pulse durations
+// of 100..5000 milliseconds.
 func (r controlRequest) valid() bool {
 	if r.Command == "ptz_move" {
 		if r.DurationMS != nil || (r.Pan == nil && r.Tilt == nil && r.Zoom == nil) {

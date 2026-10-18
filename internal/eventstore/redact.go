@@ -11,6 +11,7 @@ import (
 	"strings"
 )
 
+// redactor holds known plaintext secrets for replacement in strings in addition to structural field redaction.
 type redactor struct{ secrets []string }
 
 var sensitiveXML = regexp.MustCompile(`(?is)<(?:[\w.-]+:)?(Security|Username|Password|Nonce|SerialNumber|HardwareId|SubscriptionReference|ReferenceParameters|ProducerReference)(?:\s[^>]*)?>.*?</(?:[\w.-]+:)?(?:Security|Username|Password|Nonce|SerialNumber|HardwareId|SubscriptionReference|ReferenceParameters|ProducerReference)\s*>`)
@@ -18,6 +19,7 @@ var urlUserInfo = regexp.MustCompile(`(?i)(https?|rtsp)://[^\s<>"/@]+(?::[^\s<>"
 var secretQuery = regexp.MustCompile(`(?i)([?&](?:password|passwd|token|access_token|session|sid|auth)=)[^\s<>"&]+`)
 var stokPath = regexp.MustCompile(`(?i)(/stok=)[^/\s<>"?]+`)
 
+// sensitiveKey recognizes credential, identity, and subscription fields after normalizing common key separators.
 func sensitiveKey(key string) bool {
 	key = strings.ToLower(strings.NewReplacer("_", "", "-", "", ".", "").Replace(key))
 	for _, secret := range []string{"password", "passwd", "authorization", "authcode", "credential", "privatekey", "secret", "token", "cookie"} {
@@ -32,6 +34,7 @@ func sensitiveKey(key string) bool {
 	return false
 }
 
+// binaryKey identifies image-bearing fields whose content is replaced with a size and hash.
 func binaryKey(key string) bool {
 	switch strings.ToLower(key) {
 	case "picture", "image", "jpeg", "jpg", "thumbnail", "picturedata", "imagedata", "data64", "base64image", "faceimage":
@@ -40,6 +43,8 @@ func binaryKey(key string) bool {
 	return false
 }
 
+// redact sanitizes JSON, embedded JSON/base64, URLs, and XML credentials. It limits
+// recursion depth and truncates oversized plain strings.
 func (l *redactor) redact(value any, depth int) any {
 	if depth > 40 {
 		return "[depth limit]"
@@ -106,6 +111,7 @@ func (l *redactor) redact(value any, depth int) any {
 	}
 }
 
+// decodeJSON validates a complete JSON value and preserves numeric spellings during journal sanitization.
 func decodeJSON(data []byte, value *any) error {
 	if !json.Valid(data) {
 		return fmt.Errorf("invalid JSON payload")

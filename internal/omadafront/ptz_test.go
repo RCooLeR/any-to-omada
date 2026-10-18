@@ -14,6 +14,8 @@ import (
 	"testing"
 )
 
+// fakePTZ records control requests without moving hardware and provides
+// configurable source capabilities and preset data.
 type fakePTZ struct {
 	mu      sync.Mutex
 	calls   []string
@@ -21,12 +23,14 @@ type fakePTZ struct {
 	fail    bool
 }
 
+// record appends one control trace under the call-list mutex.
 func (f *fakePTZ) record(call string) {
 	f.mu.Lock()
 	f.calls = append(f.calls, call)
 	f.mu.Unlock()
 }
 
+// taken drains the recorded call list so each assertion owns its snapshot.
 func (f *fakePTZ) taken() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -35,28 +39,41 @@ func (f *fakePTZ) taken() []string {
 	return calls
 }
 
+// Capability returns fixture PTZ support or the configured discovery failure.
 func (f *fakePTZ) Capability(context.Context) (PTZCapability, error) {
 	if f.fail {
 		return PTZCapability{}, errors.New("unavailable")
 	}
 	return PTZCapability{PanTilt: true, Zoom: true, MaxPresets: 8}, nil
 }
+
+// Move records normalized velocities instead of sending physical movement.
 func (f *fakePTZ) Move(pan, tilt, zoom float64) {
 	f.record(fmt.Sprintf("move %.2f %.2f %.2f", pan, tilt, zoom))
 }
+
+// Stop records an explicit stop command for order assertions.
 func (f *fakePTZ) Stop() { f.record("stop") }
+
+// Presets records discovery and returns the fixture positions.
 func (f *fakePTZ) Presets(context.Context) ([]PTZPreset, error) {
 	f.record("presets")
 	return f.presets, nil
 }
+
+// GotoPreset records the requested recorder-facing position ID.
 func (f *fakePTZ) GotoPreset(_ context.Context, id int) error {
 	f.record(fmt.Sprintf("goto %d", id))
 	return nil
 }
+
+// SetPreset records the save request and returns a fixed camera-selected ID.
 func (f *fakePTZ) SetPreset(_ context.Context, id int, name string) (int, error) {
 	f.record(fmt.Sprintf("set %d %s", id, name))
 	return 4, nil
 }
+
+// RemovePreset records deletion without modifying source hardware.
 func (f *fakePTZ) RemovePreset(_ context.Context, id int) error {
 	f.record(fmt.Sprintf("remove %d", id))
 	return nil

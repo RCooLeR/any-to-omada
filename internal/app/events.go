@@ -23,6 +23,8 @@ var adapters = map[string]func(context.Context, capture.Device, capture.Sink) er
 	config.ProtocolONVIF: onvifevents.Run,
 }
 
+// sourceStatus reports physical subscription health and per-lens normalization counters
+// separately from recorder event acceptance.
 type sourceStatus struct {
 	ID            string            `json:"id"`
 	State         string            `json:"state"`
@@ -36,6 +38,8 @@ type sourceStatus struct {
 	LensEdges     map[string]uint64 `json:"virtual_camera_edges"`
 }
 
+// source shares one physical subscription across configured virtual lenses, journaling
+// native payloads before normalization and delivery.
 type source struct {
 	cfg     config.Source
 	device  capture.Device
@@ -52,12 +56,16 @@ type source struct {
 	metadataValue SourceMetadata
 }
 
+// routedEvent journals a normalized edge with its selected virtual lens and immediate
+// callback-queue outcome.
 type routedEvent struct {
 	Event           cameraevents.Event `json:"event"`
 	VirtualCameraID string             `json:"virtual_camera_id,omitempty"`
 	Delivery        string             `json:"native_omada_delivery"`
 }
 
+// newSource constructs enabled lens routes and in-memory adapter credentials without opening
+// a source connection.
 func newSource(cfg config.Source, password string, cameras []config.Camera, store capture.Sink, cancel context.CancelCauseFunc) *source {
 	s := &source{cfg: cfg, device: capture.Device{ID: cfg.ID, Host: cfg.Host, NativePort: cfg.NativePort, Username: cfg.Account.Username, Password: password}, store: store, cancel: cancel, routes: map[int]string{}, status: sourceStatus{ID: cfg.ID, State: "disabled", LensEdges: map[string]uint64{}}}
 	if cfg.Enabled {
@@ -72,6 +80,7 @@ func newSource(cfg config.Source, password string, cameras []config.Camera, stor
 	return s
 }
 
+// snapshot copies source status and its per-lens counter map under the source mutex.
 func (s *source) snapshot() sourceStatus {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -83,8 +92,11 @@ func (s *source) snapshot() sourceStatus {
 	return result
 }
 
+// state updates the subscription lifecycle label under the source mutex.
 func (s *source) state(state string) { s.mu.Lock(); s.status.State = state; s.mu.Unlock() }
 
+// startGeneration marks a reconnect and clears prior identity and encoder facts so stale
+// metadata cannot mix with fresh observations.
 func (s *source) startGeneration() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -94,6 +106,8 @@ func (s *source) startGeneration() {
 	s.metadataValue = SourceMetadata{}
 }
 
+// endGeneration schedules closure of alarm intervals only for virtual lenses routed from
+// this source.
 func (s *source) endGeneration() {
 	if s.disconnected == nil {
 		return
@@ -103,6 +117,8 @@ func (s *source) endGeneration() {
 	}
 }
 
+// write appends a source-scoped journal record and cancels the daemon on persistence
+// failure.
 func (s *source) write(protocol, kind string, data any) error {
 	if err := s.store.Write(s.cfg.ID, protocol, kind, data); err != nil {
 		s.cancel(errors.New("event persistence failed"))
@@ -111,6 +127,8 @@ func (s *source) write(protocol, kind string, data any) error {
 	return nil
 }
 
+// Write enforces adapter identity, persists native data, refreshes observed metadata, and
+// routes normalized events by their explicit source index.
 func (s *source) Write(id, protocol, kind string, data any) error {
 	if id != s.cfg.ID {
 		return errors.New("source adapter identity mismatch")
@@ -166,6 +184,8 @@ func (s *source) Write(id, protocol, kind string, data any) error {
 	return nil
 }
 
+// run retries failed capture generations with backoff up to five minutes, but stops after
+// rejected credentials or daemon cancellation.
 func (s *source) run(ctx context.Context) {
 	backoff := 15 * time.Second
 	for ctx.Err() == nil {

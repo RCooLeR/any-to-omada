@@ -1,6 +1,8 @@
 # NAS and container deployment
 
-The repository is a standalone build context. Its Docker image contains one static Go executable and license notices.
+The repository is a standalone build context. Its Docker image contains one static Go executable and license notices. One container handles all configured cameras.
+
+An external router is optional. A Linux/NAS host can own the virtual IPs and publish each IP's HTTPS/RTSP ports into the same Docker bridge container. See [networking and virtual IPs](../../docs/networking.md) for host IP assignment, per-IP publishing, direct host binaries and optional OpenWrt routing. Mango is the tested router example.
 
 ## Runtime layout
 
@@ -29,7 +31,7 @@ The image runs as `10001:10001`. A host-specific group can be selected in Compos
 2. Set Compose `build.context` to the standalone checkout if it is outside the runtime directory. Build the image on the intended builder, or load an image you have built for the host architecture. The example's image tag is local; it does not refer to an automatically published registry image.
 3. Replace the example's documentation-only IPs and stream URIs. Reserve the virtual IP outside DHCP and assign/route it using your router or host; the service does not create aliases. Confirm the source lens and native event index, set `verified: true`, then enable the source and camera.
 4. Supply the password files and an HTTPS certificate/key. The certificate must be current and include the virtual camera IP in its IP SAN. A single certificate can cover several virtual IPs. Preserve an existing valid certificate across ordinary application upgrades.
-5. Change the two host-side loopback port bindings to the NAS LAN address used by the router. Add a separate port pair for each additional camera. Keep the control port unpublished.
+5. Replace the loopback port bindings with your chosen network path: publish each host-assigned virtual IP's 443/554 to its distinct container listener pair, or publish the backend ports on the NAS LAN address for router DNAT. Add a separate pair for each additional camera; see [networking](../../docs/networking.md). Keep the control port unpublished.
 6. Validate the JSON with the built executable's `check --config` command and validate Compose. Activate only this service through your container manager. Verify the startup version, source stream readiness, NVR enrollment/video and a known event in NVR history.
 
 The default Compose bridge network is sufficient. To join an existing NAS bridge such as `ugos_shared`, declare that network as external and attach only this service. Host networking, privileged mode and Docker socket access are unnecessary. Preserve existing services when adding the translator to a shared Compose project.
@@ -39,12 +41,12 @@ The default Compose bridge network is sufficient. To join an existing NAS bridge
 | Connection | Endpoint |
 | --- | --- |
 | NVR to virtual camera | TCP 443 for HTTPS management, TCP 554 for RTSP |
-| Router to first backend | TCP 18443 and TCP 18554 in the example |
+| First container backend listeners | TCP 18443 and TCP 18554 in the example; reached through host port publishing, with router DNAT if used |
 | Translator to NVR | Native callback destination supplied during registration, observed as TCP 6000 |
 | Translator to physical camera | Configured RTSP, event protocol and explicitly enabled control ports |
 | Local operator/control health | `127.0.0.1:19031` inside the container; never published |
 
-RTSP media uses interleaved TCP; no UDP media range is required. Router DNAT sends each virtual IP's 443/554 to its own backend listener pair. Source cameras are contacted directly by the translator. An `advertised_ip` in JSON alone does not make the address reachable.
+RTSP media uses interleaved TCP; no UDP media range is required. Each virtual IP's 443/554 must reach its own backend listener pair, either through per-IP host port publishing or router DNAT. Both approaches work with the existing Docker bridge network. Source cameras are contacted directly by the translator. An `advertised_ip` in JSON alone does not assign the address or make it reachable.
 
 The optional `allowed_transport_peers` list checks the peer actually seen by the translator, which can be the router's masqueraded address. An absent or empty list allows every peer. It does not change the logical `recorder_ip` or the virtual IP.
 

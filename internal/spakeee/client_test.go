@@ -11,6 +11,8 @@ import (
 	"filippo.io/edwards25519"
 )
 
+// oracleFixture holds synthetic libsodium interoperability vectors and
+// Elligator mappings; it contains no captured device credentials.
 type oracleFixture struct {
 	Password      string `json:"password"`
 	Public        string `json:"public"`

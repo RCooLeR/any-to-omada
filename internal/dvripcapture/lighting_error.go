@@ -25,10 +25,13 @@ func (e *LightingError) Error() string {
 // Unwrap preserves classification such as unsupported without leaking its body.
 func (e *LightingError) Unwrap() error { return e.cause }
 
+// lightingFailure retains a fixed operation and stage plus an optional unwrap cause, without
+// copying native payload text.
 func lightingFailure(operation, stage string, cause error) error {
 	return &LightingError{Operation: operation, Stage: stage, cause: cause}
 }
 
+// lightingRejection classifies a rejected control and retains only a numeric native error code for diagnostics.
 func lightingRejection(operation string, answer map[string]any) error {
 	failure := &LightingError{Operation: operation, Stage: "rejected", cause: ErrLightingUnsupported}
 	if nativeError, ok := answer["error"].(map[string]any); ok {

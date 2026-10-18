@@ -83,8 +83,9 @@ type Status struct {
 	NativeEventsImplemented bool              `json:"native_events_implemented"`
 }
 
-// Server is a concurrency-safe HTTP handler without network or file side
-// effects. Session state expires without a background goroutine.
+// Server is a concurrency-safe management handler with in-memory virtual
+// settings and sessions. Configured callback and PTZ delegates can perform
+// network operations; session expiry itself needs no background goroutine.
 type Server struct {
 	username       string
 	passwordHash   string
@@ -163,6 +164,7 @@ func (s *Server) Status() Status {
 	return result
 }
 
+// expire removes sessions whose deadline has passed; the caller must hold s.mu.
 func (s *Server) expire(now time.Time) {
 	for token, until := range s.sessions {
 		if !now.Before(until) {
@@ -302,11 +304,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.write(w, http.StatusOK, map[string]any{"error_code": unsupportedCode})
 }
 
+// emptyJSONObject accepts exactly an empty JSON object, excluding null.
 func emptyJSONObject(raw json.RawMessage) bool {
 	var fields map[string]json.RawMessage
 	return json.Unmarshal(raw, &fields) == nil && fields != nil && len(fields) == 0
 }
 
+// encryptInfoRequest recognizes only the observed get_encrypt_info:null
+// shape, excluding extra operations or alternate parameter forms.
 func encryptInfoRequest(raw json.RawMessage) bool {
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(raw, &fields) != nil || len(fields) != 1 {
@@ -316,6 +321,8 @@ func encryptInfoRequest(raw json.RawMessage) bool {
 	return ok && string(value) == "null"
 }
 
+// challenge writes the observed legacy MD5 authentication challenge without
+// advertising unimplemented encryption methods.
 func (s *Server) challenge(w http.ResponseWriter) {
 	var nonce [4]byte
 	if _, err := rand.Read(nonce[:]); err != nil {
@@ -328,6 +335,8 @@ func (s *Server) challenge(w http.ResponseWriter) {
 		"data": map[string]any{"code": -40407, "encrypt_type": []string{"1"}, "passwdType": "md5", "nonce": hex.EncodeToString(nonce[:]), "secVersion": "1.0"}})
 }
 
+// login verifies the legacy proof, allocates a bounded expiring session and
+// writes the response; its returned label describes proof acceptance only.
 func (s *Server) login(w http.ResponseWriter, raw json.RawMessage) string {
 	var login struct {
 		Username     string `json:"username"`
@@ -368,6 +377,8 @@ func (s *Server) login(w http.ResponseWriter, raw json.RawMessage) string {
 	return "accepted"
 }
 
+// authorized checks an exact session URL and removes expired sessions without
+// renewing their lifetime.
 func (s *Server) authorized(path string) bool {
 	if len(path) != len("/stok=")+sessionBytes*2+len("/ds") || !strings.HasPrefix(path, "/stok=") || !strings.HasSuffix(path, "/ds") {
 		return false
@@ -381,6 +392,8 @@ func (s *Server) authorized(path string) bool {
 	return ok && now.Before(until)
 }
 
+// read resolves a bounded set of selectors against one metadata snapshot;
+// unknown sections are omitted, and an entirely unsupported read returns false.
 func (s *Server) read(request map[string]json.RawMessage) (map[string]any, bool) {
 	if len(request) < 2 || len(request) > 17 {
 		return nil, false
@@ -439,6 +452,8 @@ func (s *Server) read(request map[string]json.RawMessage) (map[string]any, bool)
 	return response, true
 }
 
+// successfulReadLabel categorizes a completed read using fixed names,
+// including multi-module responses, without retaining request values.
 func successfulReadLabel(request map[string]json.RawMessage) string {
 	label := operationLabel(request, "get")
 	if label != "unsupported_read" {
@@ -454,6 +469,8 @@ func successfulReadLabel(request map[string]json.RawMessage) string {
 	return "management_read"
 }
 
+// unsupported increments a fixed operation category under the status lock,
+// never storing arbitrary request fields.
 func (s *Server) unsupported(request map[string]json.RawMessage, method string) {
 	// Fixed labels prevent attacker-controlled keys or credentials becoming logs.
 	label := "unknown"
@@ -490,8 +507,11 @@ func (s *Server) write(w http.ResponseWriter, status int, value any) {
 	writeJSON(w, status, value)
 }
 
+// writeJSON sends an unencoded JSON response and records its diagnostic code.
 func writeJSON(w http.ResponseWriter, status int, value any) { writeBody(w, status, value, nil) }
 
+// writeBody records response status before writing JSON or pre-encoded JSON;
+// a disconnected client terminates the response without logging its payload.
 func writeBody(w http.ResponseWriter, status int, value any, encoded []byte) {
 	if diagnostic, ok := w.(*requestDiagnostic); ok {
 		diagnostic.httpStatus = status
@@ -511,6 +531,8 @@ func writeBody(w http.ResponseWriter, status int, value any, encoded []byte) {
 	_ = json.NewEncoder(w).Encode(value)
 }
 
+// requestDiagnostic wraps one response with bounded diagnostic labels and
+// status fields; it must not retain request credentials or session tokens.
 type requestDiagnostic struct {
 	http.ResponseWriter
 	operation          string
@@ -527,7 +549,7 @@ type requestDiagnostic struct {
 	requestShape       []string
 }
 
-// Classify paths without retaining a session token or arbitrary request text.
+// pathKind classifies paths without retaining a session token or arbitrary text.
 func pathKind(path string) string {
 	switch {
 	case path == "/":
@@ -541,6 +563,8 @@ func pathKind(path string) string {
 	}
 }
 
+// operationLabel classifies request operations using fixed labels before
+// dispatch; unsupported_read can be refined after a successful read.
 func operationLabel(request map[string]json.RawMessage, method string) string {
 	switch method {
 	case "set":

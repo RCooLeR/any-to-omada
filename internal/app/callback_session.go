@@ -12,6 +12,8 @@ import (
 	"github.com/RCooLeR/any-to-omada/internal/omadalink"
 )
 
+// callbackMessage retains method-specific application JSON and separately tracks absent
+// versus zero outer and event error codes.
 type callbackMessage struct {
 	ID                uint16          `json:"id"`
 	Method            string          `json:"method"`
@@ -24,6 +26,8 @@ type callbackMessage struct {
 	notifyErrorCode   *int
 }
 
+// session establishes the native encrypted callback transport, logs bounded handshake
+// diagnostics, and owns its application session until failure or cancellation.
 func (c *callback) session(ctx context.Context, attempt *callbackAttempt) string {
 	raw, err := c.dial(ctx, "tcp", callbackAddress(attempt))
 	if err != nil {
@@ -60,6 +64,8 @@ func (c *callback) session(ctx context.Context, attempt *callbackAttempt) string
 	return c.applicationSession(ctx, conn, attempt)
 }
 
+// applicationSession declares the virtual camera, gates commands and events on account
+// authentication, and drives heartbeats, acknowledgement expiry, and alarm cleanup.
 func (c *callback) applicationSession(ctx context.Context, conn net.Conn, attempt *callbackAttempt) string {
 	authentication, err := omadalink.NewApplicationAuth(c.credentials)
 	if err != nil {
@@ -192,6 +198,8 @@ func (c *callback) applicationSession(ctx context.Context, conn net.Conn, attemp
 	}
 }
 
+// writeCallback sends a complete encoded frame with a five-second deadline and rejects
+// writes that make no progress.
 func writeCallback(conn net.Conn, frame []byte) error {
 	if err := conn.SetWriteDeadline(time.Now().Add(5 * time.Second)); err != nil {
 		return err
@@ -209,6 +217,8 @@ func writeCallback(conn net.Conn, frame []byte) error {
 	return nil
 }
 
+// validPeerVersion checks the captured declaration format of exactly five bytes encoded as
+// ten hexadecimal characters.
 func validPeerVersion(value string) bool {
 	if len(value) != 10 {
 		return false

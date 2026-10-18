@@ -85,6 +85,8 @@ func Open(directory string, segmentBytes int64, segments int, secrets []string) 
 	return s, nil
 }
 
+// owned lists sorted segment names belonging to this store and refuses matching nonregular
+// files before retention can touch them.
 func (s *Store) owned() ([]string, error) {
 	entries, err := os.ReadDir(s.directory)
 	if err != nil {
@@ -104,6 +106,8 @@ func (s *Store) owned() ([]string, error) {
 	return files, nil
 }
 
+// rotate syncs the old segment, exclusively creates its successor, and retires only excess
+// owned segments; callers serialize it with writes.
 func (s *Store) rotate() error {
 	if s.file != nil {
 		if err := s.file.Sync(); err != nil {

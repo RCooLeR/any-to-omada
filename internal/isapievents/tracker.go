@@ -45,6 +45,7 @@ func detections(a alert) []detection {
 	return nil
 }
 
+// targetClasses maps explicit target labels to a sorted, unique set of human, vehicle, and pet classes.
 func targetClasses(labels []string) []string {
 	seen := map[string]bool{}
 	var result []string
@@ -81,6 +82,7 @@ func (a alert) lens() int {
 	return -1
 }
 
+// interval retains the source, rule, and class context needed to emit a matching Stop after quiet expiry.
 type interval struct {
 	code, provenance, rule string
 	index                  int
@@ -94,10 +96,13 @@ type tracker struct {
 	open  map[string]*interval
 }
 
+// newTracker creates an empty interval set whose detections expire after the supplied quiet duration.
 func newTracker(quiet time.Duration) *tracker {
 	return &tracker{quiet: quiet, open: map[string]*interval{}}
 }
 
+// apply folds active repeats into at most 128 open intervals and emits transitions only for
+// recognized active/inactive states.
 func (t *tracker) apply(a alert, now time.Time) []map[string]any {
 	state := strings.ToLower(a.EventState)
 	if state != "active" && state != "inactive" {
@@ -213,6 +218,7 @@ func (t *tracker) expire(now time.Time) []map[string]any {
 	return result
 }
 
+// event builds a canonical edge from the interval context so its start and stop retain identical provenance.
 func (i *interval) event(action string) map[string]any {
 	return cameraevents.Canonical(i.code, action, i.index, i.provenance, i.classes, i.rule)
 }

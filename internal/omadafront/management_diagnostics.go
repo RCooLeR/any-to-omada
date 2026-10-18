@@ -5,9 +5,9 @@ import (
 	"slices"
 )
 
-// These names come from the captured NVR GETs and the inspected camera firmware
-// default-node inventory. Video nodes also match its management registry. They
-// identify known protocol vocabulary, not implemented or supported operations.
+// readModuleVocabulary lists names from captured NVR GETs and the inspected
+// camera firmware default-node inventory. Video nodes also match its management
+// registry. These are protocol names, not a list of implemented operations.
 func readModuleVocabulary() map[string]string {
 	return map[string]string{
 		"OSD":                         "OSD",
@@ -118,6 +118,8 @@ func readModuleVocabulary() map[string]string {
 	}
 }
 
+// readSelectorVocabulary lists observed selector names for diagnostics,
+// including operations that the translator does not implement.
 func readSelectorVocabulary() map[string][]string {
 	return map[string][]string{
 		"OSD":                         {"azimuth", "date_info", "font_info", "label_info", "logo_info", "osd_state", "zoom"},
@@ -228,8 +230,8 @@ func readSelectorVocabulary() map[string][]string {
 	}
 }
 
-// Only fixed vocabulary labels leave these classifiers. Request values, unknown
-// module/selector names, and unrelated fields never enter a diagnostic label.
+// readModuleLabels emits only fixed vocabulary labels. Request values, unknown
+// module names and unrelated fields never enter a diagnostic label.
 func readModuleLabels(request map[string]json.RawMessage) []string {
 	known := readModuleVocabulary()
 	labels := make(map[string]bool)
@@ -246,6 +248,8 @@ func readModuleLabels(request map[string]json.RawMessage) []string {
 	return boundedReadLabels(labels, 8)
 }
 
+// readSelectorLabels reports bounded known selector labels and input forms,
+// counting unknown modules without emitting their supplied names.
 func readSelectorLabels(request map[string]json.RawMessage) (labels, forms []string, unknownModules int) {
 	knownModules := readModuleVocabulary()
 	knownSelectors := readSelectorVocabulary()
@@ -302,6 +306,8 @@ func readSelectorLabels(request map[string]json.RawMessage) (labels, forms []str
 	return boundedReadLabels(labelSet, 16), boundedReadLabels(formSet, 5), unknownModules
 }
 
+// addReadSelectorLabel adds a known selector or a fixed unknown marker;
+// prefix must already come from the approved module/selector vocabulary.
 func addReadSelectorLabel(labels map[string]bool, known []string, prefix, value string) {
 	if slices.Contains(known, value) {
 		labels[prefix+value] = true
@@ -310,6 +316,8 @@ func addReadSelectorLabel(labels map[string]bool, known []string, prefix, value 
 	}
 }
 
+// boundedReadLabels sorts and bounds diagnostic labels while retaining an
+// unknown marker; callers supply enough capacity for truncation markers.
 func boundedReadLabels(set map[string]bool, limit int) []string {
 	labels := make([]string, 0, len(set))
 	unknown := set["unknown"]

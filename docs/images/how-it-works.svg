@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="840" viewBox="0 0 1440 840" role="img" aria-labelledby="title description">
+  <title id="title">How any-to-omada connects supported cameras to an Omada NVR</title>
+  <desc id="description">Physical cameras provide RTSP main and sub streams and local detections. The any-to-omada service runs on a NAS, server or single-board computer, relays encoded video without transcoding, maps events to native Omada alarms and keeps a local event journal. The NVR connects to virtual HTTPS and RTSP endpoints, optionally through OpenWrt routing, with Mango as the tested example. Native alarm callbacks connect directly from the translator to the NVR. Each verified lens can have its own virtual camera. Event compatibility depends on the source model and recorder.</desc>
+  <defs>
+    <linearGradient id="background" x2="1" y2="1">
+      <stop stop-color="#12232e"/>
+      <stop offset="1" stop-color="#091218"/>
+    </linearGradient>
+    <linearGradient id="translator" x2="0" y2="1">
+      <stop stop-color="#153a3d"/>
+      <stop offset="1" stop-color="#10272d"/>
+    </linearGradient>
+    <marker id="video-arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M1 1 8 5 1 9" fill="none" stroke="#36d6b9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <marker id="event-arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M1 1 8 5 1 9" fill="none" stroke="#9dc6f9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <marker id="route-arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M1 1 8 5 1 9" fill="none" stroke="#a4bac6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <g id="camera-icon" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="1" y="5" width="24" height="18" rx="4"/>
+      <circle cx="13" cy="14" r="5"/>
+      <path d="m25 10 7-4v16l-7-4M7 5l3-4h7l3 4"/>
+    </g>
+    <g id="event-icon" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 16h6l4-10 6 20 4-10h6"/>
+      <circle cx="16" cy="16" r="15" opacity=".4"/>
+    </g>
+  </defs>
+  <g font-family="Segoe UI, Arial, sans-serif">
+    <rect width="1440" height="840" rx="24" fill="url(#background)"/>
+    <rect x=".5" y=".5" width="1439" height="839" rx="24" fill="none" stroke="#2a404b"/>
+    <path d="M49 50h32" stroke="#36d6b9" stroke-width="4" stroke-linecap="round"/>
+    <text x="96" y="56" fill="#8fc9c1" font-size="15" font-weight="600" letter-spacing="2.5">ANY-TO-OMADA</text>
+    <text x="48" y="116" fill="#f0f7fa" font-size="40" font-weight="650">Your cameras. One Omada NVR.</text>
+    <text x="48" y="157" fill="#a4bac6" font-size="22">Relay the video. Translate the events.</text>
+    <rect x="1178" y="42" width="214" height="34" rx="17" fill="#1a3039"/>
+    <circle cx="1197" cy="59" r="4" fill="#36d6b9"/>
+    <text x="1211" y="65" fill="#c5d9e2" font-size="16">Local interoperability</text>
+
+    <!-- Sources -->
+    <rect x="48" y="210" width="300" height="392" rx="18" fill="#14242e" stroke="#324b58"/>
+    <text x="72" y="248" fill="#8ba6b6" font-size="14" font-weight="600" letter-spacing="2">01 / SOURCE</text>
+    <text x="72" y="291" fill="#f0f7fa" font-size="28" font-weight="600">IP cameras</text>
+    <text x="72" y="324" fill="#a4bac6" font-size="18">Supported brands and models</text>
+    <rect x="72" y="365" width="252" height="70" rx="10" fill="#0d1c24"/>
+    <use href="#camera-icon" x="88" y="386" color="#36d6b9"/>
+    <text x="134" y="393" fill="#d6eee8" font-size="19" font-weight="600">Main / sub streams</text>
+    <text x="134" y="419" fill="#8daab6" font-size="16">H.264 / H.265</text>
+    <rect x="72" y="465" width="252" height="70" rx="10" fill="#0d1c24"/>
+    <use href="#event-icon" x="88" y="484" color="#9dc6f9"/>
+    <text x="134" y="493" fill="#d8e7fb" font-size="19" font-weight="600">Detections</text>
+    <text x="88" y="526" fill="#8daab6" font-size="16">Native / ONVIF / ISAPI events</text>
+    <text x="72" y="575" fill="#a4bac6" font-size="16">Detection runs on the camera.</text>
+
+    <!-- Translator -->
+    <rect x="500" y="210" width="440" height="392" rx="18" fill="url(#translator)" stroke="#39a995" stroke-width="1.5"/>
+    <text x="524" y="248" fill="#70d6c4" font-size="14" font-weight="600" letter-spacing="2">02 / TRANSLATOR</text>
+    <text x="524" y="291" fill="#f0f7fa" font-size="30" font-weight="650">any-to-omada</text>
+    <text x="524" y="324" fill="#a8c9cc" font-size="18">NAS · server · single-board computer</text>
+    <rect x="524" y="365" width="392" height="70" rx="10" fill="#0b2429"/>
+    <rect x="524" y="379" width="3" height="42" rx="1.5" fill="#36d6b9"/>
+    <text x="544" y="393" fill="#d6eee8" font-size="21" font-weight="600">Relay encoded video</text>
+    <text x="544" y="419" fill="#a4bac6" font-size="17">No video transcoding</text>
+    <rect x="524" y="465" width="392" height="70" rx="10" fill="#10252f"/>
+    <rect x="524" y="479" width="3" height="42" rx="1.5" fill="#9dc6f9"/>
+    <text x="544" y="493" fill="#d8e7fb" font-size="21" font-weight="600">Map camera events to Omada</text>
+    <text x="544" y="519" fill="#a4bac6" font-size="17">Native alarms + local event journal</text>
+    <text x="524" y="575" fill="#a8c9cc" font-size="17">Virtual camera identity + HTTPS management</text>
+
+    <!-- Recorder -->
+    <rect x="1092" y="210" width="300" height="392" rx="18" fill="#14242e" stroke="#324b58"/>
+    <text x="1116" y="248" fill="#8ba6b6" font-size="14" font-weight="600" letter-spacing="2">03 / RECORDER</text>
+    <text x="1116" y="291" fill="#f0f7fa" font-size="28" font-weight="600">Omada NVR</text>
+    <text x="1116" y="324" fill="#a4bac6" font-size="17">One channel per verified lens</text>
+    <rect x="1116" y="365" width="252" height="70" rx="10" fill="#0d1c24"/>
+    <text x="1132" y="393" fill="#d6eee8" font-size="20" font-weight="600">Live view + recording</text>
+    <text x="1132" y="419" fill="#8daab6" font-size="16">Virtual camera streams</text>
+    <rect x="1116" y="465" width="252" height="70" rx="10" fill="#0d1c24"/>
+    <text x="1132" y="493" fill="#d8e7fb" font-size="20" font-weight="600">Detection history</text>
+    <text x="1132" y="519" fill="#8daab6" font-size="16">Supported source events</text>
+    <text x="1116" y="575" fill="#a4bac6" font-size="16">Model / event support varies.</text>
+
+    <!-- Data flows; arrows show payload direction, not session initiation. -->
+    <g text-anchor="middle" font-size="17" font-weight="600">
+      <text x="424" y="377" fill="#73d8c6">RTSP</text>
+      <path d="M357 400h134" fill="none" stroke="#36d6b9" stroke-width="2" marker-end="url(#video-arrow)"/>
+      <text x="424" y="477" fill="#aacaf4">Local events</text>
+      <path d="M357 500h134" fill="none" stroke="#9dc6f9" stroke-width="2" marker-end="url(#event-arrow)"/>
+      <text x="1016" y="377" fill="#73d8c6">RTSP video</text>
+      <path d="M949 400h134" fill="none" stroke="#36d6b9" stroke-width="2" marker-end="url(#video-arrow)"/>
+      <text x="1016" y="477" fill="#aacaf4">Omada alarms</text>
+      <path d="M949 500h134" fill="none" stroke="#9dc6f9" stroke-width="2" marker-end="url(#event-arrow)"/>
+    </g>
+
+    <!-- Optional network arrangement for the NVR-facing listeners. -->
+    <rect x="48" y="632" width="1344" height="130" rx="16" fill="#101f28" stroke="#304652" stroke-dasharray="6 5"/>
+    <text x="72" y="667" fill="#a4bac6" font-size="14" font-weight="600" letter-spacing="2">OPTIONAL ROUTING</text>
+    <text x="72" y="704" fill="#d6e4eb" font-size="22" font-weight="600">OpenWrt router</text>
+    <text x="72" y="735" fill="#8daab6" font-size="17">Virtual IPs + port forwarding only</text>
+    <g text-anchor="middle">
+      <rect x="460" y="654" width="170" height="48" rx="8" fill="#1c303a"/>
+      <text x="545" y="684" fill="#d6e4eb" font-size="18">NVR requests</text>
+      <path d="M642 678h66" fill="none" stroke="#a4bac6" stroke-width="2" marker-end="url(#route-arrow)"/>
+      <rect x="722" y="654" width="236" height="48" rx="8" fill="#1c303a"/>
+      <text x="840" y="684" fill="#d6e4eb" font-size="18">Router / virtual IP</text>
+      <path d="M970 678h66" fill="none" stroke="#a4bac6" stroke-width="2" marker-end="url(#route-arrow)"/>
+      <rect x="1050" y="654" width="318" height="48" rx="8" fill="#1c303a"/>
+      <text x="1209" y="684" fill="#d6e4eb" font-size="18">Translator HTTPS + RTSP</text>
+    </g>
+    <text x="460" y="735" fill="#8daab6" font-size="17">Native alarm callbacks connect directly from the translator to the NVR.</text>
+    <text x="48" y="805" fill="#8daab6" font-size="16">Independent, experimental interoperability workaround. Compatibility depends on the camera and NVR firmware.</text>
+  </g>
+</svg>

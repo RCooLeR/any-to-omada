@@ -1,5 +1,6 @@
 // Package camerartsp exposes two fixed live profiles from one selected camera
-// source. It forwards existing RTP without transcoding or inventing metadata.
+// source. It relays encoded media without transcoding and can insert configured
+// Omada event metadata without changing the encoded picture.
 package camerartsp
 
 import (
@@ -40,6 +41,8 @@ type Config struct {
 	RetryMax       time.Duration
 }
 
+// validate applies zero-value limits and rejects ambiguous credentials, invalid
+// endpoints and profile URLs outside the configured upstream origin.
 func (c *Config) validate() error {
 	listenHost, listenPort, err := net.SplitHostPort(c.Address)
 	listenIP, parseErr := netip.ParseAddr(listenHost)
@@ -95,12 +98,15 @@ func (c *Config) validate() error {
 	return nil
 }
 
+// validIP excludes wildcard, multicast and IPv4 broadcast addresses from peers.
 func validIP(ip netip.Addr) bool {
 	return ip.IsValid() && !ip.IsUnspecified() && !ip.IsMulticast() && ip.String() != "255.255.255.255"
 }
 
+// origin returns the sole address the upstream dialer is permitted to contact.
 func (c Config) origin() string { return net.JoinHostPort(c.UpstreamIP, strconv.Itoa(c.UpstreamPort)) }
 
+// sameOrigin checks RTSP scheme, host and port, treating an omitted port as 554.
 func (c Config) sameOrigin(u *base.URL) bool {
 	if u == nil || u.Scheme != "rtsp" || u.Hostname() != c.UpstreamIP {
 		return false

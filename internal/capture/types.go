@@ -17,5 +17,7 @@ type Device struct {
 
 // Sink receives semantic payloads; its implementation redacts secrets centrally.
 type Sink interface {
+	// Write handles one source-scoped record; an error stops the adapter so
+	// events cannot continue silently after persistence or delivery fails.
 	Write(deviceID, protocol, kind string, data any) error
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/RCooLeR/any-to-omada/internal/capture"
 )
 
+// timings bounds native RPCs, keepalive spacing, and the independent shutdown cleanup window.
 type timings struct {
 	rpc       time.Duration
 	keepAlive time.Duration
@@ -23,11 +24,14 @@ type timings struct {
 
 var defaultTimings = timings{rpc: 5 * time.Second, keepAlive: 20 * time.Second, cleanup: 3 * time.Second}
 
+// received transfers a complete frame or its read failure from the socket reader to the session owner.
 type received struct {
 	frame frame
 	err   error
 }
 
+// client owns one sequential DVRIP session; its reader goroutine supplies frames while the
+// session loop correlates replies and notifications.
 type client struct {
 	conn      net.Conn
 	device    capture.Device
@@ -46,6 +50,8 @@ func Run(ctx context.Context, device capture.Device, sink capture.Sink) error {
 	return run(ctx, device, sink, defaultTimings)
 }
 
+// run opens one authenticated capture session, owns its reader goroutine, and waits for
+// bounded detach/logout cleanup before returning.
 func run(ctx context.Context, device capture.Device, sink capture.Sink, limits timings) (runErr error) {
 	port := device.NativePort
 	if port == 0 {
@@ -102,6 +108,8 @@ func run(ctx context.Context, device capture.Device, sink capture.Sink, limits t
 	return c.capture(ctx)
 }
 
+// login performs one legacy challenge exchange with a cancellable deadline and records the
+// authenticated session identifier.
 func (c *client) login(ctx context.Context) (loginErr error) {
 	if err := c.conn.SetDeadline(time.Now().Add(c.timings.rpc)); err != nil {
 		return fmt.Errorf("set DVRIP login deadline: %w", err)
@@ -149,6 +157,8 @@ func (c *client) login(ctx context.Context) (loginErr error) {
 	return nil
 }
 
+// capture journals source metadata, subscribes to all event codes, and consumes
+// notifications while maintaining the native session.
 func (c *client) capture(ctx context.Context) error {
 	for _, request := range []struct {
 		method string
@@ -197,6 +207,8 @@ func (c *client) capture(ctx context.Context) error {
 	}
 }
 
+// rpc sends one correlated request with a bounded deadline, journaling intervening events
+// while waiting for its reply.
 func (c *client) rpc(ctx context.Context, method string, params any) (map[string]any, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.timings.rpc)
 	defer cancel()
@@ -243,6 +255,8 @@ func (c *client) rpc(ctx context.Context, method string, params any) (map[string
 	}
 }
 
+// recordResponse classifies native replies for the shared sink and preserves response fields
+// alongside request duration in milliseconds.
 func (c *client) recordResponse(method string, params any, answer map[string]any, duration time.Duration) error {
 	kind := "response"
 	switch {
@@ -267,6 +281,8 @@ func (c *client) recordResponse(method string, params any, answer map[string]any
 	return c.sink.Write(c.device.ID, "dvrip", kind, data)
 }
 
+// consume journals every notification in a frame and returns a reply only when its ID
+// matches the outstanding nonzero request.
 func (c *client) consume(packet received, requestID uint32) (map[string]any, error) {
 	if packet.err != nil {
 		return nil, packet.err
@@ -292,6 +308,7 @@ func (c *client) consume(packet received, requestID uint32) (map[string]any, err
 	return answer, nil
 }
 
+// requireSuccess requires an explicit native result=true without exposing camera-controlled error text.
 func requireSuccess(answer map[string]any, operation string) error {
 	if answer["result"] != true {
 		return fmt.Errorf("DVRIP %s rejected", operation)
@@ -299,6 +316,8 @@ func requireSuccess(answer map[string]any, operation string) error {
 	return nil
 }
 
+// cleanup attempts detach and logout, reserving half the remaining deadline for logout when
+// a subscription was attempted.
 func (c *client) cleanup(ctx context.Context) error {
 	var cleanupErr error
 	if c.attached {

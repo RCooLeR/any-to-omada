@@ -102,12 +102,15 @@ func assertHandshakeDiagnostics(t *testing.T, err error, stage string, received,
 	}
 }
 
+// secondReadConn signals when a handshake attempts its second transport read,
+// allowing tests to coordinate cancellation without timing guesses.
 type secondReadConn struct {
 	net.Conn
 	reads      atomic.Int32
 	secondRead chan struct{}
 }
 
+// Read signals the second call before delegating to the underlying connection.
 func (c *secondReadConn) Read(data []byte) (int, error) {
 	if c.reads.Add(1) == 2 {
 		close(c.secondRead)

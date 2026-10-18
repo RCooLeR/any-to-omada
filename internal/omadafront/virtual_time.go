@@ -21,6 +21,8 @@ type virtualTimeState struct {
 	dst    map[string]any
 }
 
+// newVirtualTimeState starts an in-memory UTC clock view with default display
+// and disabled DST settings; now supplies the underlying clock.
 func newVirtualTimeState(now func() time.Time) *virtualTimeState {
 	return &virtualTimeState{now: now,
 		basic: map[string]any{"timezone": "UTC+00:00", "zone_id": "Etc/UTC", "date_format": 0, "time_format": 0},
@@ -29,6 +31,8 @@ func newVirtualTimeState(now func() time.Time) *virtualTimeState {
 	}
 }
 
+// read returns copied display settings or the offset virtual clock as Unix
+// seconds and microseconds, without changing host time.
 func (s *virtualTimeState) read(name string) (any, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -45,6 +49,8 @@ func (s *virtualTimeState) read(name string) (any, bool) {
 	}
 }
 
+// copyTimeFields copies scalar presentation settings so callers cannot
+// modify the stored map.
 func copyTimeFields(source map[string]any) map[string]any {
 	result := make(map[string]any, len(source))
 	for key, value := range source {
@@ -79,6 +85,8 @@ func (s *virtualTimeState) write(method string, request map[string]json.RawMessa
 var virtualTimezonePattern = regexp.MustCompile(`^UTC[+-](0[0-9]|1[0-4]):[0-5][0-9]$`)
 var virtualZoneIDPattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_+.-]{0,63}(?:/[A-Za-z0-9_+.-]{1,64}){0,3}$`)
 
+// configure validates all requested time-display sections before applying
+// their leaves together under the state lock.
 func (s *virtualTimeState) configure(system map[string]json.RawMessage) bool {
 	updates := make(map[string]map[string]any, len(system))
 	for section, raw := range system {
@@ -113,6 +121,8 @@ func (s *virtualTimeState) configure(system map[string]json.RawMessage) bool {
 	return true
 }
 
+// parseTimeConfig checks allowed time-display leaves and preserves the
+// wire types expected by reads, including string-valued DST numbers.
 func parseTimeConfig(section, key string, raw json.RawMessage) (any, bool) {
 	var text string
 	if section == "basic" {
@@ -157,12 +167,15 @@ func parseTimeConfig(section, key string, raw json.RawMessage) (any, bool) {
 	return strconv.FormatInt(value, 10), ok
 }
 
+// textValue accepts a JSON string only when it matches the supplied grammar.
 func textValue(raw json.RawMessage, pattern *regexp.Regexp) (string, bool) {
 	var value string
 	ok := json.Unmarshal(raw, &value) == nil && pattern.MatchString(value)
 	return value, ok
 }
 
+// timeConfigInteger accepts a non-null JSON integer within inclusive bounds;
+// numeric strings are not accepted for this time protocol.
 func timeConfigInteger(raw json.RawMessage, minimum, maximum int64) (int64, bool) {
 	var value int64
 	if len(raw) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) || json.Unmarshal(raw, &value) != nil {
@@ -171,6 +184,8 @@ func timeConfigInteger(raw json.RawMessage, minimum, maximum int64) (int64, bool
 	return value, value >= minimum && value <= maximum
 }
 
+// setClock validates a fresh ordered NVR_NTP exchange and applies its
+// midpoint correction to this virtual clock only; no device clock is written.
 func (s *virtualTimeState) setClock(raw json.RawMessage) bool {
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(raw, &fields) != nil || len(fields) != 9 {

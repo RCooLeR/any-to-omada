@@ -81,17 +81,24 @@ func TestUnrestrictedManagementRetainsConnectionLimit(t *testing.T) {
 	}
 }
 
+// managementPeerConn gives local pipe connections a fixed nonloopback identity for admission
+// tests.
 type managementPeerConn struct{ net.Conn }
 
+// RemoteAddr reports the fixture peer used to test exact management allowlists.
 func (*managementPeerConn) RemoteAddr() net.Addr {
 	return &net.TCPAddr{IP: net.ParseIP("192.0.2.99"), Port: 1234}
 }
 
+// managementPeerListener supplies an initial pipe then decorates later accepted connections
+// with the fixture peer identity.
 type managementPeerListener struct {
 	net.Listener
 	conn net.Conn
 }
 
+// Accept returns the pending pipe first, then wraps connections from the underlying test
+// listener.
 func (l *managementPeerListener) Accept() (net.Conn, error) {
 	if l.conn != nil {
 		conn := l.conn
@@ -105,11 +112,14 @@ func (l *managementPeerListener) Accept() (net.Conn, error) {
 	return &managementPeerConn{Conn: conn}, nil
 }
 
+// managementConnectionQueue provides a finite sequence of connections for exercising
+// listener slot limits.
 type managementConnectionQueue struct {
 	net.Listener
 	connections []net.Conn
 }
 
+// Accept pops one prepared connection or reports closure when the fixture queue is empty.
 func (l *managementConnectionQueue) Accept() (net.Conn, error) {
 	if len(l.connections) == 0 {
 		return nil, net.ErrClosed

@@ -22,7 +22,10 @@ type Challenge struct {
 	Stale                                bool
 }
 
+// nonceKey separates replay counters by server realm, nonce, and hash algorithm.
 type nonceKey struct{ realm, nonce, algorithm string }
+
+// nonceState tracks one increasing request count and its randomly generated client nonce.
 type nonceState struct {
 	count       uint32
 	clientNonce string
@@ -138,6 +141,8 @@ func Parse(value string) (Challenge, error) {
 	return result, nil
 }
 
+// header formats an MD5 or SHA-256 Digest response using the caller-owned nonce count and
+// optional auth quality of protection.
 func header(username, password, method, uri string, c Challenge, count uint32, clientNonce string) string {
 	hash := func(value string) string {
 		if c.Algorithm == "SHA-256" {

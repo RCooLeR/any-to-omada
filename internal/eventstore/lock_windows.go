@@ -10,6 +10,8 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+// lockDirectory obtains a nonblocking exclusive writer lock; closing the returned file or
+// process exit releases it.
 func lockDirectory(directory string) (*os.File, error) {
 	f, err := os.OpenFile(filepath.Join(directory, ".writer.lock"), os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {

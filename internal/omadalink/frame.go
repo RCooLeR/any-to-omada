@@ -159,14 +159,17 @@ func ReadFrame(r *bufio.Reader, trailingCRLF bool) (_ Frame, err error) {
 	return Frame{ContentType: contentType, Body: body}, nil
 }
 
-// This error exposes only fixed parser categories, never received bytes.
+// frameReadFailure exposes only fixed parser categories, never received bytes.
 type frameReadFailure struct {
 	reason string
 	prefix string
 	cause  error
 }
 
+// Error describes the fixed envelope-failure category without received bytes.
 func (e *frameReadFailure) Error() string { return "invalid callback envelope: " + e.reason }
+
+// Unwrap exposes the framing or transport cause for errors.Is/errors.As.
 func (e *frameReadFailure) Unwrap() error { return e.cause }
 
 // Encode returns a bounded envelope containing the exact Body bytes.
@@ -203,10 +206,13 @@ func Encode(frame Frame, trailingCRLF bool) ([]byte, error) {
 	return append(encoded, ending...), nil
 }
 
+// validType limits pre-TLS envelopes to algorithm negotiation and SPAKE2.
 func validType(value ContentType) bool {
 	return value == AlgorithmVersion || value == Spake2
 }
 
+// readLiteral consumes exactly the requested boundary and rejects mismatches
+// without reading ahead into the next protocol step.
 func readLiteral(r *bufio.Reader, expected string) error {
 	actual := make([]byte, len(expected))
 	if _, err := io.ReadFull(r, actual); err != nil {
@@ -218,6 +224,8 @@ func readLiteral(r *bufio.Reader, expected string) error {
 	return nil
 }
 
+// readHeaderLine reads one CRLF-terminated header within maxHeaderLineSize
+// and returns its bytes without the CRLF.
 func readHeaderLine(r *bufio.Reader) ([]byte, error) {
 	line := make([]byte, 0, maxHeaderLineSize)
 	for range maxHeaderLineSize {
@@ -236,6 +244,8 @@ func readHeaderLine(r *bufio.Reader) ([]byte, error) {
 	return nil, ErrFrameTooLarge
 }
 
+// decimalLength accepts only unsigned decimal digits and rejects values above
+// MaxFrameSize before callers allocate a body buffer.
 func decimalLength(value []byte) (int, error) {
 	if len(value) == 0 {
 		return 0, ErrInvalidFrame
@@ -253,6 +263,8 @@ func decimalLength(value []byte) (int, error) {
 	return length, nil
 }
 
+// incomplete turns an end-of-stream encountered inside a frame into
+// io.ErrUnexpectedEOF while preserving other parser and transport failures.
 func incomplete(err error) error {
 	if errors.Is(err, io.EOF) {
 		return io.ErrUnexpectedEOF

@@ -17,11 +17,13 @@ import (
 
 const maxPayload = 256 * 1024
 
+// frame holds the fixed DVRIP header and its bounded payload as separate wire components.
 type frame struct {
 	header [32]byte
 	body   []byte
 }
 
+// readFrame reads exactly one DVRIP frame, rejecting payloads above 256 KiB before allocating their buffer.
 func readFrame(reader io.Reader) (frame, error) {
 	var result frame
 	if _, err := io.ReadFull(reader, result.header[:]); err != nil {
@@ -38,6 +40,7 @@ func readFrame(reader io.Reader) (frame, error) {
 	return result, nil
 }
 
+// writeFrame encodes a payload of at most 256 KiB and handles partial header/body writes.
 func writeFrame(writer io.Writer, header [32]byte, body []byte) error {
 	if len(body) > maxPayload {
 		return errors.New("DVRIP request exceeds limit")
@@ -58,14 +61,18 @@ func writeFrame(writer io.Writer, header [32]byte, body []byte) error {
 	return nil
 }
 
+// challengeHeader constructs the legacy DVRIP request that obtains the login realm and random challenge.
 func challengeHeader() [32]byte {
 	return [32]byte{0: 0xa0, 1: 0x01, 24: 0x05, 25: 0x02, 26: 0x01, 27: 0x01, 30: 0xa1, 31: 0xaa}
 }
 
+// loginHeader constructs the legacy DVRIP envelope for the challenge response.
 func loginHeader() [32]byte {
 	return [32]byte{0: 0xa0, 1: 0x05, 24: 0x05, 25: 0x02, 27: 0x08, 30: 0xa1, 31: 0xaa}
 }
 
+// latin1 encodes legacy authentication text, rejecting characters that cannot be represented
+// by a single Latin-1 byte.
 func latin1(value string) ([]byte, error) {
 	result := make([]byte, 0, len(value))
 	for _, char := range value {
@@ -77,6 +84,7 @@ func latin1(value string) ([]byte, error) {
 	return result, nil
 }
 
+// fromLatin1 decodes device bytes without losing their values when the camera omits UTF-8 encoding.
 func fromLatin1(value []byte) string {
 	var result strings.Builder
 	result.Grow(len(value))
@@ -86,6 +94,8 @@ func fromLatin1(value []byte) string {
 	return result.String()
 }
 
+// loginPayload combines the two legacy challenge responses required by DVRIP; it never
+// includes the plaintext password.
 func loginPayload(username, password string, challenge []byte) ([]byte, error) {
 	var realm, nonce string
 	for _, line := range strings.Split(fromLatin1(challenge), "\n") {
@@ -126,6 +136,8 @@ func loginPayload(username, password string, challenge []byte) ([]byte, error) {
 	return append(userBytes, []byte("&&"+second+legacy)...), nil
 }
 
+// jsonMessages decodes concatenated DVRIP JSON objects, preserving numbers and sanitizing
+// parse errors that could contain device data.
 func jsonMessages(body []byte) ([]map[string]any, error) {
 	body = bytes.Trim(body, "\x00\r\n\t ")
 	if !utf8.Valid(body) {

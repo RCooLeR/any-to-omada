@@ -41,6 +41,8 @@ var (
 	ErrRefused = errors.New("ptz request refused")
 )
 
+// soapClient holds one camera's bounded HTTP transport, authentication cooldown
+// and clock offset for WS-Security tokens; credentials remain in memory.
 type soapClient struct {
 	base, username, password string
 	http                     *http.Client
@@ -54,6 +56,8 @@ type soapClient struct {
 	now          func() time.Time
 }
 
+// newSOAP prepares an HTTP client with bounded connections and timeouts, no
+// environment proxy and no redirect following; it sends no requests yet.
 func newSOAP(host string, port int, username, password string) *soapClient {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.Proxy = nil
@@ -72,6 +76,9 @@ func (c *soapClient) call(ctx context.Context, path, namespace, operation, conte
 	return c.exchange(ctx, true, path, namespace, operation, content, out)
 }
 
+// exchange validates one SOAP response and handles explicit Digest challenges,
+// including one stale-nonce renewal. It never retries an uncertain transport
+// outcome and returns fixed error classes annotated with the operation stage.
 func (c *soapClient) exchange(ctx context.Context, authenticated bool, path, namespace, operation, content string, out any) (resultErr error) {
 	stage := "request"
 	defer func() {
@@ -176,6 +183,8 @@ func (c *soapClient) exchange(ctx context.Context, authenticated bool, path, nam
 	return nil
 }
 
+// envelope wraps caller-built XML and optionally adds a fresh UsernameToken
+// nonce with a creation timestamp adjusted to the camera clock.
 func (c *soapClient) envelope(authenticated bool, namespace, operation, content string) ([]byte, error) {
 	header := ""
 	if authenticated {
@@ -197,6 +206,8 @@ func (c *soapClient) envelope(authenticated bool, namespace, operation, content 
 		`<s:Body><t:` + operation + `>` + content + `</t:` + operation + `></s:Body></s:Envelope>`), nil
 }
 
+// request sends one SOAP POST with optional HTTP Digest and reads at most
+// maxSOAPBytes. Transport and size failures expose no response content.
 func (c *soapClient) request(ctx context.Context, path, namespace, operation string, payload []byte, challenge *digestChallenge) (int, string, []byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+path, bytes.NewReader(payload))
 	if err != nil {
@@ -247,6 +258,8 @@ func (c *soapClient) syncClock(ctx context.Context) {
 	c.authMu.Unlock()
 }
 
+// blockAuth suppresses subsequent SOAP requests for fifteen minutes after an
+// authentication failure to reduce lockout pressure on the shared account.
 func (c *soapClient) blockAuth() {
 	c.authMu.Lock()
 	// Long enough that a wrong password cannot lock the shared source account.
@@ -254,6 +267,7 @@ func (c *soapClient) blockAuth() {
 	c.authMu.Unlock()
 }
 
+// xmlText escapes a value for insertion into XML text or quoted attributes.
 func xmlText(value string) string {
 	var b bytes.Buffer
 	_ = xml.EscapeText(&b, []byte(value)) // bytes.Buffer writes cannot fail.

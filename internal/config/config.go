@@ -293,6 +293,8 @@ var profileToken = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,64}$`)
 // own capability names.
 var ptzModuleSpecCandidates = map[string]bool{"motor": true, "ptz": true, "preset": true, "ptz_preset": true}
 
+// validatePTZ permits physical controls only for a PTZ lens with a bounded movement duration
+// and allowlisted capability experiments.
 func (v Camera) validatePTZ() error {
 	if v.PTZ == nil {
 		if len(v.Compatibility.PTZModuleSpecKeys) > 0 {
@@ -314,6 +316,7 @@ func (v Camera) validatePTZ() error {
 	return nil
 }
 
+// validate checks virtual compatibility fields without probing the recorder or changing the physical source.
 func (c Compatibility) validate() error {
 	if c.ModuleSpecProfile != "" && c.ModuleSpecProfile != "minimal" && c.ModuleSpecProfile != "omada-ipc-observed" {
 		return errors.New("compatibility module_spec_profile must be minimal or omada-ipc-observed")
@@ -336,11 +339,13 @@ func validMask(mask net.IP) bool {
 	return bits == 32 && ones >= 8 && ones <= 30
 }
 
+// validIP accepts explicit IPv4 addresses except unspecified, multicast, and limited-broadcast addresses.
 func validIP(value string) bool {
 	ip, err := netip.ParseAddr(value)
 	return err == nil && ip.Is4() && !ip.IsUnspecified() && !ip.IsMulticast() && value != "255.255.255.255"
 }
 
+// address parses an explicit IPv4 listener and a port from 1 to 65535, permitting 0.0.0.0 as a wildcard bind.
 func address(value string) (string, int, error) {
 	host, port, err := net.SplitHostPort(value)
 	n, numberErr := strconv.Atoi(port)
@@ -350,6 +355,7 @@ func address(value string) (string, int, error) {
 	return host, n, nil
 }
 
+// overlaps reports listener conflicts, treating a wildcard bind as covering every interface on the same port.
 func overlaps(a, b string) bool {
 	ah, ap, _ := address(a)
 	bh, bp, _ := address(b)
@@ -375,6 +381,8 @@ func StreamURL(value, host string) (*url.URL, error) {
 	return u, nil
 }
 
+// validate requires a bounded username and exactly one syntactically valid password
+// reference; it does not resolve that reference.
 func (a Account) validate() error {
 	if a.Username == "" || len(a.Username) > 128 || strings.ContainsAny(a.Username, "\r\n\x00") || (a.PasswordFile == "") == (a.PasswordEnv == "") || (a.PasswordEnv != "" && !environment.MatchString(a.PasswordEnv)) {
 		return errors.New("invalid credential reference")

@@ -21,11 +21,13 @@ Successful video does not establish control compatibility. The last confirmed re
 ```text
 Physical cameras -- RTSP + local event protocol --> any-to-omada
                                                       ^
-Omada NVR -- virtual camera IP:443/554 -- router DNAT --|
+Omada NVR -- virtual IP:443/554 -- host or router -----|
 Omada NVR <----------- authenticated callback ---------|
 ```
 
 Run the translator on a NAS, server or suitable single-board computer. A small OpenWrt router such as Mango can provide IP aliases and kernel DNAT. It does not decode video or translate event payloads. A router is optional if another host provides the virtual IPs and port mappings.
+
+See [networking and virtual IPs](networking.md) for Linux, Windows and NAS address options, per-IP Docker publishing, and optional OpenWrt routers. Mango is one tested router example.
 
 Each virtual camera needs its own IP and HTTPS/RTSP listener pair:
 
@@ -33,7 +35,7 @@ Each virtual camera needs its own IP and HTTPS/RTSP listener pair:
 | --- | --- |
 | NVR to virtual camera management | TCP 443 |
 | NVR to virtual camera video | TCP 554 |
-| Router to example translator listeners | TCP 18443 and 18554 |
+| Docker publishing or router DNAT to example translator listeners | TCP 18443 and 18554 |
 | Translator to NVR native callback | TCP 6000, as observed on the tested recorder |
 
 The [Mango routing profiles](../deploy/mango/README.md) contain fixed addresses from the original deployment. Review and replace their topology, interface names and port mappings before using them on another network.

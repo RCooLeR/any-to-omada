@@ -34,6 +34,8 @@ type Status struct {
 	Profiles   map[string]ProfileStatus `json:"profiles"`
 }
 
+// profile tracks one shared upstream generation. Server.mu guards its status,
+// stream and video metadata; packet counters can update without that lock.
 type profile struct {
 	name, url  string
 	status     ProfileStatus
@@ -169,6 +171,8 @@ func (s *Server) Close() {
 	})
 }
 
+// selected resolves an exact public profile path. Query strings are rejected;
+// a known profile with no usable upstream returns ServiceUnavailable.
 func (s *Server) selected(path, query string) (*gortsplib.ServerStream, base.StatusCode) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -243,6 +247,8 @@ func (s *Server) OnStreamWriteError(ctx *gortsplib.ServerHandlerOnStreamWriteErr
 	ctx.Session.Close()
 }
 
+// limitedListener enforces the optional peer allowlist and live TCP connection
+// limit before gortsplib receives a connection.
 type limitedListener struct {
 	net.Listener
 	allowed map[netip.Addr]bool
@@ -250,6 +256,8 @@ type limitedListener struct {
 	count   atomic.Int64
 }
 
+// Accept closes refused peers and excess connections, then keeps accepting
+// until an allowed connection or an underlying listener error is available.
 func (l *limitedListener) Accept() (net.Conn, error) {
 	for {
 		conn, err := l.Listener.Accept()
@@ -273,10 +281,12 @@ func (l *limitedListener) Accept() (net.Conn, error) {
 	}
 }
 
+// countedConn ties one accepted connection to a slot in limitedListener.
 type countedConn struct {
 	net.Conn
 	once    sync.Once
 	release func()
 }
 
+// Close releases its listener slot exactly once, even if callers close twice.
 func (c *countedConn) Close() error { err := c.Conn.Close(); c.once.Do(c.release); return err }

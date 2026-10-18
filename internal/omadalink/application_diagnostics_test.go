@@ -179,12 +179,21 @@ func TestApplicationDiagnosticsLeaveAcceptedGrammarUnchanged(t *testing.T) {
 	}
 }
 
+// applicationErrorReader injects a transport error before delivering bytes.
 type applicationErrorReader struct{ err error }
 
+// Read returns the configured failure without consuming or producing data.
 func (r applicationErrorReader) Read([]byte) (int, error) { return 0, r.err }
 
+// applicationTestTimeout supplies net.Error timeout semantics with private
+// error text to test that diagnostics do not disclose underlying messages.
 type applicationTestTimeout struct{}
 
-func (*applicationTestTimeout) Error() string   { return "private-marker" }
-func (*applicationTestTimeout) Timeout() bool   { return true }
+// Error returns a sentinel string whose absence from diagnostics is asserted.
+func (*applicationTestTimeout) Error() string { return "private-marker" }
+
+// Timeout marks the synthetic failure as a network timeout.
+func (*applicationTestTimeout) Timeout() bool { return true }
+
+// Temporary keeps the synthetic timeout non-temporary for net.Error.
 func (*applicationTestTimeout) Temporary() bool { return false }

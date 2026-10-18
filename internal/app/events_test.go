@@ -8,15 +8,19 @@ import (
 	"github.com/RCooLeR/any-to-omada/internal/config"
 )
 
+// stored retains one source journal call for assertions about native and normalized output.
 type stored struct {
 	kind, protocol string
 	data           any
 }
+
+// memorySink collects synchronous source writes and can inject a persistence failure.
 type memorySink struct {
 	records []stored
 	failure error
 }
 
+// Write records the attempted journal entry before returning the configured storage error.
 func (s *memorySink) Write(_ string, protocol, kind string, data any) error {
 	s.records = append(s.records, stored{kind, protocol, data})
 	return s.failure

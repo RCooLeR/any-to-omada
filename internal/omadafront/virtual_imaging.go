@@ -9,15 +9,20 @@ import (
 // one virtual camera. It never changes the physical source's exposure, sensor
 // or encoder and does not replace the actual main/minor stream metadata.
 type virtualImagingState struct {
+	// mu guards both presentation settings; no I/O occurs while it is held.
 	mu              sync.Mutex
 	flicker         string
 	sensorFrameRate string
 }
 
+// newVirtualImagingState starts the virtual presentation settings at 50 Hz
+// and 25 fps without configuring a physical sensor.
 func newVirtualImagingState() *virtualImagingState {
 	return &virtualImagingState{flicker: "50hz", sensorFrameRate: "25"}
 }
 
+// read returns a fresh map containing the requested virtual flicker or sensor
+// frame-rate setting, distinct from source stream metadata.
 func (v *virtualImagingState) read(module, name string) (any, bool) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
@@ -74,6 +79,8 @@ func (v *virtualImagingState) write(method string, request map[string]json.RawMe
 	return true
 }
 
+// imagingSetting extracts one string leaf from an exact section/leaf object,
+// rejecting sibling fields rather than silently accepting a partial write.
 func imagingSetting(raw json.RawMessage, section, leaf string) (string, bool) {
 	var sections, fields map[string]json.RawMessage
 	if json.Unmarshal(raw, &sections) != nil || len(sections) != 1 ||

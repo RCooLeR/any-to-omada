@@ -34,28 +34,39 @@ func ApplicationReadDiagnostics(err error) (ApplicationReadFailure, bool) {
 	return failure.details, true
 }
 
+// applicationReadFailure retains a payload-free parser snapshot and its cause
+// so diagnostics and errors.Is/errors.As can inspect the same failure.
 type applicationReadFailure struct {
 	details ApplicationReadFailure
 	cause   error
 }
 
+// Error formats fixed parser labels without exposing the underlying payload or
+// transport error text.
 func (e *applicationReadFailure) Error() string {
 	return "omada application frame failed at " + e.details.Stage + ": " + e.details.Reason
 }
 
+// Unwrap preserves the original parser or transport error for error matching.
 func (e *applicationReadFailure) Unwrap() error { return e.cause }
 
+// applicationReadProgress tracks consumed bytes for a single frame; buffered
+// read-ahead belongs to subsequent frames and is not included.
 type applicationReadProgress struct {
 	reader  *bufio.Reader
 	details ApplicationReadFailure
 }
 
+// Read delegates to the buffered reader and counts even partially successful
+// reads before returning their error.
 func (p *applicationReadProgress) Read(data []byte) (int, error) {
 	n, err := p.reader.Read(data)
 	p.details.ReceivedBytes += n
 	return n, err
 }
 
+// failure snapshots progress, deriving a fixed failure category only when the
+// parser has not already supplied a more specific reason.
 func (p *applicationReadProgress) failure(err error) error {
 	if p.details.Reason == "" {
 		var networkError net.Error
@@ -77,6 +88,8 @@ func (p *applicationReadProgress) failure(err error) error {
 	return &applicationReadFailure{details: p.details, cause: err}
 }
 
+// readLiteral consumes exactly the expected boundary bytes and rejects any
+// difference without storing received content in diagnostics.
 func (p *applicationReadProgress) readLiteral(expected string) error {
 	actual := make([]byte, len(expected))
 	if _, err := io.ReadFull(p, actual); err != nil {
@@ -88,7 +101,7 @@ func (p *applicationReadProgress) readLiteral(expected string) error {
 	return nil
 }
 
-// Keep the same limits and CRLF contract as readHeaderLine while counting bytes
+// readHeaderLine keeps the package header parser's limits and CRLF contract while counting bytes
 // consumed, including incomplete and malformed lines. Buffered read-ahead is not
 // part of the failed frame and must not inflate its diagnostic count.
 func (p *applicationReadProgress) readHeaderLine() ([]byte, error) {

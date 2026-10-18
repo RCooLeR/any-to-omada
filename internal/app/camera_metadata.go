@@ -8,6 +8,8 @@ import (
 	"github.com/RCooLeR/any-to-omada/internal/omadafront"
 )
 
+// cameraMetadata combines physical identity with the selected lens's current RTSP facts and
+// compatible encoder configuration.
 func cameraMetadata(camera *camera, source *source) omadafront.Metadata {
 	facts := source.metadata()
 	brand := brandNames[source.cfg.Brand]
@@ -35,6 +37,8 @@ func cameraMetadata(camera *camera, source *source) omadafront.Metadata {
 var brandNames = map[string]string{"imou": "Imou", "dahua": "Dahua", "amcrest": "Amcrest", "hikvision": "Hikvision", "annke": "Annke",
 	"reolink": "Reolink", "axis": "Axis", "hanwha": "Hanwha", "uniview": "Uniview", "tapo": "Tapo", "bosch": "Bosch", "vivotek": "Vivotek", "foscam": "Foscam"}
 
+// reconcileVideoMetadata gives active SDP facts priority and fills configuration fields only
+// when both sources report the same nonempty codec.
 func reconcileVideoMetadata(observed camerartsp.VideoMetadata, configured SourceEncoder) omadafront.VideoMetadata {
 	value := omadafront.VideoMetadata{Codec: observed.Codec, Width: observed.Width, Height: observed.Height,
 		FrameRateNumerator: observed.FrameRateNumerator, FrameRateDenominator: observed.FrameRateDenominator}

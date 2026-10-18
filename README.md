@@ -4,12 +4,14 @@ A standalone Go service that presents supported IP cameras to an Omada NVR as vi
 
 **A temporary compatibility workaround while Omada's ONVIF interoperability improves.** No vendor commitment or timetable is implied. This is an independent, experimental project, not an official or certified camera implementation.
 
+[![How it works: supported cameras send video and detections through any-to-omada to an Omada NVR; optional OpenWrt routing provides virtual IPs.](docs/images/how-it-works.svg)](docs/getting-started.md#plan-the-network-path)
+
 ## What it does
 
 - Relays main and sub streams over RTSP/TCP without transcoding.
 - Maps supported motion, human, vehicle, pet, line-crossing and intrusion events to Omada notifications.
 - Exposes separately addressed virtual cameras for verified lenses of multi-lens devices.
-- Runs on a NAS, server or suitable single-board computer; optional OpenWrt/Mango routing supplies virtual IPs.
+- Runs on a NAS, PC or suitable single-board computer; host IP aliases or optional OpenWrt routing supply virtual IPs.
 
 Dahua/Imou streams and selected events have been tested with an Omada NVR16-8P. Other adapters and model/event combinations need their own validation. Physical controls are experimental; see their [tested behavior and limits](docs/controls.md).
 
@@ -20,7 +22,8 @@ Dahua/Imou streams and selected events have been tested with an Omada NVR16-8P. 
 | [Getting started](docs/getting-started.md) | Requirements, architecture and first-camera setup |
 | [Configuration](docs/configuration.md) | Sources, credentials, lenses, adapters and compatibility options |
 | [NAS / Docker](deploy/nas/README.md) | Container setup, permissions and updates |
-| [Mango routing](deploy/mango/README.md) | Reference IP forwarding profiles and rollback |
+| [Networking and virtual IPs](docs/networking.md) | Host aliases, Linux/Windows/NAS options and optional OpenWrt routing |
+| [OpenWrt routing reference](deploy/mango/README.md) | Mango example, IP forwarding profiles and rollback |
 | [Events](docs/events.md) | Detection mappings, event lifecycles and limitations |
 | [Physical controls](docs/controls.md) | PTZ, white light and alarm outputs; verification status |
 | [Operation](docs/operations.md) | Health, readiness, event storage and troubleshooting |

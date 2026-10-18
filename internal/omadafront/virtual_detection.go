@@ -28,15 +28,20 @@ const (
 // recorder UI. State is in memory and resets on restart; nothing is forwarded
 // to the physical source.
 type virtualDetectionState struct {
+	// mu guards all module sections and tables; no network I/O occurs under it.
 	mu      sync.Mutex
 	modules map[string]*detectionModule
 }
 
+// detectionModule holds one virtual module's named sections and region tables;
+// access is protected by its owning virtualDetectionState mutex.
 type detectionModule struct {
 	sections map[string]map[string]any
 	tables   map[string][]any
 }
 
+// allDaySchedule builds the firmware's string-valued seven-day arming schedule
+// covering each full day.
 func allDaySchedule() map[string]any {
 	schedule := map[string]any{}
 	for _, day := range []string{"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"} {
@@ -47,6 +52,8 @@ func allDaySchedule() map[string]any {
 	return schedule
 }
 
+// notifyList builds virtual linkage flags with recording and message push on,
+// leaving physical output and additional flags off; it does not perform those actions.
 func notifyList(extra ...string) map[string]any {
 	list := map[string]any{"client_enabled": "off", "app_enabled": "off", "msg_push_enabled": "on", "sound_alarm_enabled": "off",
 		"light_alarm_enabled": "off", "record_enabled": "on", "AO1_enabled": "off", "ftp_enabled": "off", "capture_enabled": "off",
@@ -57,10 +64,14 @@ func notifyList(extra ...string) map[string]any {
 	return list
 }
 
+// fullFramePolygon creates a virtual UI region spanning the 0-10000 coordinate
+// grid; the source camera remains responsible for detection geometry.
 func fullFramePolygon(key string) []any {
 	return []any{map[string]any{key: map[string]any{"points_num": 4, "points_x": []any{0, 10000, 10000, 0}, "points_y": []any{10000, 10000, 0, 0}}}}
 }
 
+// newVirtualDetectionState initializes in-memory settings that admit mapped
+// source detections; these defaults do not configure source-camera rules.
 func newVirtualDetectionState() *virtualDetectionState {
 	return &virtualDetectionState{modules: map[string]*detectionModule{
 		"motion_detection": {
@@ -181,7 +192,8 @@ func observedLinkageCapability() map[string]any {
 		"ftp_capability": alarm, "email_capability": alarm, "report_server_capability": "000000000000000000000000000000000000"}
 }
 
-// read returns a detached copy of one named section.
+// read returns a shallow copy of one named section; nested values remain
+// shared and callers must treat them as read-only.
 func (v *virtualDetectionState) read(module, name string) (any, bool) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
@@ -196,7 +208,8 @@ func (v *virtualDetectionState) read(module, name string) (any, bool) {
 	return copyLeaves(section), true
 }
 
-// table returns a detached copy of one region table.
+// table copies the region-table slice; its row maps remain shared and callers
+// must treat them as read-only.
 func (v *virtualDetectionState) table(module, name string) ([]any, bool) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
@@ -354,6 +367,8 @@ func decodeLeaves(raw json.RawMessage) (map[string]any, bool) {
 	return fields, true
 }
 
+// copyLeaves copies a section map shallowly; any nested values remain shared
+// and must be treated as read-only by callers.
 func copyLeaves(section map[string]any) map[string]any {
 	result := make(map[string]any, len(section))
 	for name, value := range section {
@@ -362,7 +377,7 @@ func copyLeaves(section map[string]any) map[string]any {
 	return result
 }
 
-// enabledLeaf reports whether a section's enabled leaf is "on".
+// enabledLeaf reports whether a selected section leaf is the string "on".
 func (v *virtualDetectionState) enabledLeaf(module, section, leaf string) bool {
 	v.mu.Lock()
 	defer v.mu.Unlock()

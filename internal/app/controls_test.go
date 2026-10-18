@@ -14,23 +14,35 @@ import (
 	"github.com/RCooLeR/any-to-omada/internal/onvifptz"
 )
 
+// controlPTZFake records queued moves/stops and can reject source capability probing without
+// touching a device.
 type controlPTZFake struct {
 	moves, stops int
 	err          error
 }
 
+// Capability reports pan/tilt-only fixture support and returns the configured probe error.
 func (p *controlPTZFake) Capability(context.Context) (onvifptz.Capability, error) {
 	return onvifptz.Capability{PanTilt: true}, p.err
 }
-func (p *controlPTZFake) Move(float64, float64, float64) { p.moves++ }
-func (p *controlPTZFake) Stop()                          { p.stops++ }
 
+// Move records a queued fixture command without simulating physical completion.
+func (p *controlPTZFake) Move(float64, float64, float64) { p.moves++ }
+
+// Stop records priority stop requests for busy-gate assertions.
+func (p *controlPTZFake) Stop() { p.stops++ }
+
+// controlLightFake counts attempted pulses and injects source failures into the operator
+// API.
 type controlLightFake struct {
 	pulses int
 	err    error
 }
 
+// Available returns the configured fixture discovery result without changing pulse counters.
 func (l *controlLightFake) Available(context.Context, int, int) error { return l.err }
+
+// Pulse records one attempted light action and returns its configured failure.
 func (l *controlLightFake) Pulse(context.Context, int, int, int, time.Duration) error {
 	l.pulses++
 	return l.err

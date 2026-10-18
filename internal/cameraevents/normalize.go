@@ -120,6 +120,8 @@ func Normalize(deviceID string, received time.Time, payload any, mappings []Mapp
 	return events, nil
 }
 
+// normalizeEntry validates one native event and records only classifications supported by
+// its code, object labels, or an exact operator mapping.
 func normalizeEntry(deviceID string, received time.Time, value any, mappings []Mapping) (Event, error) {
 	object, ok := value.(map[string]any)
 	if !ok {
@@ -228,6 +230,8 @@ func normalizeEntry(deviceID string, received time.Time, value any, mappings []M
 	return event, nil
 }
 
+// classifyIVS derives a stable class set from explicit object labels; mixed classes leave
+// the singular Class unknown.
 func classifyIVS(event *Event) {
 	classes := make(map[string]bool)
 	for _, label := range event.ObjectTypes {
@@ -253,6 +257,8 @@ func classifyIVS(event *Event) {
 	}
 }
 
+// validateMappings rejects unbounded, unscoped, or duplicate Intelligent-event overrides
+// before any payload is interpreted.
 func validateMappings(mappings []Mapping) error {
 	if len(mappings) > 256 {
 		return errors.New("event mappings exceed limit")
@@ -271,6 +277,7 @@ func validateMappings(mappings []Mapping) error {
 	return nil
 }
 
+// first returns the first present spelling of a native field, including an explicitly null value.
 func first(object map[string]any, names ...string) any {
 	for _, name := range names {
 		if value, present := object[name]; present {
@@ -280,10 +287,12 @@ func first(object map[string]any, names ...string) any {
 	return nil
 }
 
+// validText bounds text by bytes and rejects Unicode control characters before fields enter normalized events.
 func validText(value string, limit int) bool {
 	return len(value) <= limit && strings.IndexFunc(value, unicode.IsControl) < 0
 }
 
+// numberText accepts finite JSON-compatible numeric values while preserving an existing number spelling.
 func numberText(value any) (json.Number, bool) {
 	var text string
 	switch number := value.(type) {
@@ -310,6 +319,8 @@ func numberText(value any) (json.Number, bool) {
 	return json.Number(text), true
 }
 
+// discriminatorText reduces supported string and numeric discriminators to the exact text
+// used by operator mappings.
 func discriminatorText(value any) string {
 	if text, ok := value.(string); ok {
 		return text
@@ -320,6 +331,7 @@ func discriminatorText(value any) string {
 	return ""
 }
 
+// objectTypes appends at most 64 unique, bounded native class labels without interpreting them.
 func objectTypes(object map[string]any, result *[]string) {
 	add := func(value any) {
 		if text, ok := value.(string); ok && text != "" && validText(text, maxFieldBytes) && len(*result) < 64 {
@@ -341,6 +353,7 @@ func objectTypes(object map[string]any, result *[]string) {
 	}
 }
 
+// decodeObject accepts one bounded JSON object and applies the same structural checks to already decoded values.
 func decodeObject(payload any) (map[string]any, error) {
 	var encoded []byte
 	switch value := payload.(type) {
@@ -379,6 +392,8 @@ func decodeObject(payload any) (map[string]any, error) {
 	return decodeObject(value)
 }
 
+// checkValue bounds depth, node count, and estimated payload size while rejecting
+// unsupported Go values and nonfinite numbers.
 func checkValue(value any, depth int, nodes, size *int) error {
 	*nodes++
 	*size += 8
@@ -429,6 +444,8 @@ func copyField(value any) (any, error) {
 	return safeCopy(value), nil
 }
 
+// safeCopy clones nested maps and lists while omitting secret-bearing fields from retained
+// discriminator and rule metadata.
 func safeCopy(value any) any {
 	switch value := value.(type) {
 	case map[string]any:
@@ -451,6 +468,7 @@ func safeCopy(value any) any {
 	}
 }
 
+// sensitiveField normalizes punctuation and case before recognizing secret-bearing metadata keys.
 func sensitiveField(key string) bool {
 	name := strings.Map(func(value rune) rune {
 		if unicode.IsLetter(value) || unicode.IsDigit(value) {

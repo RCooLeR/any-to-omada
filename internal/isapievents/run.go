@@ -34,6 +34,7 @@ const (
 	maxPart    = 64 << 10
 )
 
+// timings controls request deadlines, stream inactivity, detection quiet expiry, and journal heartbeat spacing.
 type timings struct {
 	request, idle, quiet, heartbeat time.Duration
 }
@@ -50,6 +51,7 @@ func Run(ctx context.Context, device capture.Device, sink capture.Sink) error {
 	return run(ctx, device, sink, defaultTimings)
 }
 
+// client pins ISAPI requests to one source endpoint and protects its reusable Digest challenge with mu.
 type client struct {
 	base   *url.URL
 	http   *http.Client
@@ -59,6 +61,8 @@ type client struct {
 	challenge *httpdigest.Challenge
 }
 
+// newClient creates a camera-pinned HTTP transport with bounded response-header time and
+// disabled redirects and environment proxies.
 func newClient(device capture.Device, request time.Duration) *client {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.Proxy = nil
@@ -130,12 +134,15 @@ func (c *client) get(ctx context.Context, path string) (*http.Response, error) {
 	}
 }
 
+// drain closes a rejected response without reading its body, which may otherwise stall a long-lived alert request.
 func drain(resp *http.Response) {
 	// Error bodies are not needed. Reading them can stall indefinitely on the
 	// long-lived stream request before its idle watchdog has started.
 	_ = resp.Body.Close()
 }
 
+// run owns the alert connection and inactivity watchdog, journals notifications, and expires
+// detection intervals on quiet periods.
 func run(ctx context.Context, device capture.Device, sink capture.Sink, t timings) error {
 	c := newClient(device, t.request)
 	defer c.http.CloseIdleConnections()
@@ -210,6 +217,8 @@ func run(ctx context.Context, device capture.Device, sink capture.Sink, t timing
 	}
 }
 
+// readIdentity journals optional model and firmware fields; authentication, cancellation,
+// and sink failures propagate to capture.
 func readIdentity(ctx context.Context, c *client, deviceID string, sink capture.Sink, timeout time.Duration) error {
 	call, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -258,6 +267,7 @@ func (a alert) heartbeat() bool {
 	return (strings.EqualFold(a.EventType, "videoloss") && strings.EqualFold(a.EventState, "inactive")) || strings.EqualFold(a.Description, "heartbeat")
 }
 
+// journal selects bounded native metadata for diagnostics without copying the entire alert document or image data.
 func (a alert) journal() map[string]any {
 	return map[string]any{"event_type": clean(a.EventType), "event_state": clean(a.EventState), "channel": clean(a.ChannelID),
 		"dyn_channel": clean(a.DynChannelID), "active_post_count": clean(a.ActivePostCount), "date_time": clean(a.DateTime), "targets": a.TargetTypes, "regions": a.RegionIDs}
@@ -341,6 +351,7 @@ func readParts(body io.Reader, boundary string, parts chan<- alert, done <-chan 
 	}
 }
 
+// readLine joins buffered fragments while enforcing a byte limit on a single multipart line.
 func readLine(reader *bufio.Reader, limit int) ([]byte, error) {
 	var line []byte
 	for {
@@ -355,6 +366,7 @@ func readLine(reader *bufio.Reader, limit int) ([]byte, error) {
 	}
 }
 
+// readHeader bounds the complete MIME header block before delegating syntax parsing to net/textproto.
 func readHeader(reader *bufio.Reader) (textproto.MIMEHeader, error) {
 	var data []byte
 	for {
@@ -373,6 +385,9 @@ func readHeader(reader *bufio.Reader) (textproto.MIMEHeader, error) {
 	}
 	return header, nil
 }
+
+// parseXML reads the common alert fields and collects bounded target classes and region IDs
+// from firmware-dependent nesting.
 func parseXML(data []byte) (alert, bool) {
 	var parsed alert
 	if xml.Unmarshal(data, &parsed) != nil || parsed.EventType == "" {
@@ -406,6 +421,7 @@ func parseXML(data []byte) (alert, bool) {
 	return parsed, true
 }
 
+// parseJSON extracts the alert envelope and searches at most six nested levels for target and region metadata.
 func parseJSON(data []byte) (alert, bool) {
 	var raw map[string]any
 	if json.Unmarshal(data, &raw) != nil {
@@ -439,6 +455,7 @@ func parseJSON(data []byte) (alert, bool) {
 	return parsed, parsed.EventType != ""
 }
 
+// text converts supported JSON string or numeric fields into bounded alert metadata.
 func text(value any) string {
 	switch value := value.(type) {
 	case string:
@@ -449,6 +466,7 @@ func text(value any) string {
 	return ""
 }
 
+// appendBounded keeps at most eight unique, nonempty metadata values after cleaning each value.
 func appendBounded(values []string, value string) []string {
 	value = clean(value)
 	if value == "" || len(values) >= 8 {
@@ -462,6 +480,7 @@ func appendBounded(values []string, value string) []string {
 	return append(values, value)
 }
 
+// clean trims alert text, caps it at 64 bytes, and strips ASCII control characters before journaling.
 func clean(value string) string {
 	value = strings.TrimSpace(value)
 	if len(value) > 64 {

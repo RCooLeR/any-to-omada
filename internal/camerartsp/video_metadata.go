@@ -40,6 +40,8 @@ func (s *Server) VideoMetadata() map[string]VideoMetadata {
 	return result
 }
 
+// descriptionVideoMetadata reads codec, dimensions and nominal SPS timing from
+// one unambiguous H.264/H.265 video format; absent or invalid values stay zero.
 func descriptionVideoMetadata(desc *description.Session) VideoMetadata {
 	if desc == nil {
 		return VideoMetadata{}
@@ -94,6 +96,8 @@ func descriptionVideoMetadata(desc *description.Session) VideoMetadata {
 	return result
 }
 
+// reducedRate reduces a rational frame rate to 32-bit components, returning
+// zeroes for missing timing or values that still overflow after reduction.
 func reducedRate(numerator, denominator uint64) (uint32, uint32) {
 	if numerator == 0 || denominator == 0 {
 		return 0, 0

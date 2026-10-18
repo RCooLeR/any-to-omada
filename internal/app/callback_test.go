@@ -84,6 +84,7 @@ func TestCallbackLogsRecorderErrorWithoutFramePayload(t *testing.T) {
 func TestCallbackRegistrationReplacementAndShutdownJoinWorkers(t *testing.T) {
 	c := newCallback(t.Context(), "test-camera", "192.0.2.210", slog.New(slog.NewTextHandler(io.Discard, nil)))
 	t.Cleanup(c.close)
+	// attempt pairs a dial destination with the signal that its worker has stopped.
 	type attempt struct {
 		address string
 		stopped <-chan struct{}

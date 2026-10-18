@@ -16,6 +16,8 @@ import (
 const translatedPulseDuration = time.Second
 const maxTrackedAlarmKeys = 128
 
+// alarmHold retains a detection start and optional synthetic expiry; a zero expiry waits for
+// a source Stop edge.
 type alarmHold struct {
 	started time.Time
 	expires time.Time // Zero denotes a source-controlled Start/Stop interval.
@@ -26,6 +28,8 @@ type alarmHold struct {
 // invented as an Omada region number.
 type alarmTracker map[string]map[omadalink.EventType]alarmHold
 
+// clone copies nested alarm state so translation can be rolled back when the callback queue
+// lacks capacity.
 func (a alarmTracker) clone() alarmTracker {
 	copy := make(alarmTracker, len(a))
 	for key, types := range a {
@@ -37,6 +41,8 @@ func (a alarmTracker) clone() alarmTracker {
 	return copy
 }
 
+// alarmKey combines native code, source index, and canonicalized rule/discriminator
+// provenance to keep overlapping alarms separate.
 func alarmKey(event cameraevents.Event) string {
 	provenance, _ := json.Marshal(struct {
 		Rules         map[string]any
@@ -45,8 +51,8 @@ func alarmKey(event cameraevents.Event) string {
 	return event.Code + "\x00" + strconv.Itoa(event.SourceIndex) + "\x00" + string(provenance)
 }
 
-// DVRIP and CGI can encode the same rule/discriminator as a JSON number or a
-// decimal string. Only their identity representation changes; logs stay raw.
+// canonicalAlarmValue unifies numeric and decimal-string rule/discriminator
+// identities across DVRIP and CGI. Journaled native values remain unchanged.
 func canonicalAlarmValue(value any) any {
 	switch value := value.(type) {
 	case json.Number:
@@ -74,7 +80,8 @@ func canonicalAlarmValue(value any) any {
 	}
 }
 
-// A sparse stop can close one compatible interval, never guess between rules.
+// matchingStopKey allows a sparse stop to close one compatible interval, never
+// guessing between rules.
 // Extra start-only provenance is permitted; every field present on the stop
 // must match. An empty result leaves the caller's ordinary stop handling intact.
 func (a alarmTracker) matchingStopKey(event cameraevents.Event) (string, bool) {
@@ -114,6 +121,7 @@ func (a alarmTracker) matchingStopKey(event cameraevents.Event) (string, bool) {
 	return match, false
 }
 
+// has reports whether any source interval still holds a particular Omada event type active.
 func (a alarmTracker) has(eventType omadalink.EventType) bool {
 	for _, types := range a {
 		if _, ok := types[eventType]; ok {
@@ -123,6 +131,8 @@ func (a alarmTracker) has(eventType omadalink.EventType) bool {
 	return false
 }
 
+// sortedTypes orders event IDs numerically so generated stop notifications have a
+// deterministic sequence.
 func sortedTypes(types map[omadalink.EventType]alarmHold) []omadalink.EventType {
 	result := make([]omadalink.EventType, 0, len(types))
 	for eventType := range types {
@@ -225,6 +235,8 @@ func (a alarmTracker) apply(event cameraevents.Event, now time.Time, allow func(
 	return accepted, "queued", suppressed
 }
 
+// expire removes elapsed synthetic intervals and emits a stop only after the final
+// overlapping holder of that event type closes.
 func (a alarmTracker) expire(now time.Time) []omadalink.Event {
 	removed := make(map[omadalink.EventType]alarmHold)
 	for key, types := range a {
@@ -247,6 +259,8 @@ func (a alarmTracker) expire(now time.Time) []omadalink.Event {
 	return result
 }
 
+// intrusionStart returns the newest open intrusion start in Unix nanoseconds, or zero when
+// no intrusion remains.
 func (a alarmTracker) intrusionStart() int64 {
 	var latest time.Time
 	for _, types := range a {

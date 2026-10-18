@@ -60,6 +60,8 @@ func (a *ApplicationAuth) Challenge(id uint16) ([]byte, error) {
 	return a.challenge(id, -40401)
 }
 
+// challenge rotates the connection nonce and increments its count while keeping
+// the remaining-attempt budget separate from the protocol response code.
 func (a *ApplicationAuth) challenge(id uint16, code int) ([]byte, error) {
 	if a.failures >= applicationAuthAttempts {
 		return nil, errors.New("native callback account attempts exhausted")
@@ -124,7 +126,7 @@ func (a *ApplicationAuth) Authenticate(id uint16, request json.RawMessage) ([]by
 	return frame, err == nil, err
 }
 
-// The callback's auth handler passes the server nonce in both Digest nonce
+// applicationDigest passes the server nonce in both Digest nonce
 // positions for request verification, and the client nonce in both positions
 // for respauth. The method is the literal digestmd5, not an HTTP method. These
 // argument positions are established by the donor's 0x3b1ae8-0x3b1bf8 calls.
@@ -132,11 +134,15 @@ func applicationDigest(ha1, nonce, count string) string {
 	return applicationMD5(ha1 + ":" + nonce + ":" + count + ":" + nonce + ":auth:" + applicationMD5("digestmd5:tplink"))
 }
 
+// applicationMD5 returns the lowercase hex digest required by callback account
+// authentication; it is not a general-purpose password hash.
 func applicationMD5(value string) string {
 	hash := md5.Sum([]byte(value))
 	return hex.EncodeToString(hash[:])
 }
 
+// applicationPassword reproduces the firmware's XOR/lookup password transform
+// before account-verifier derivation; it does not encrypt stored credentials.
 func applicationPassword(password string) string {
 	// Public protocol constants from donor helper 0x250328 and the NVR web
 	// client's password transform; neither constant is a device secret.
@@ -156,6 +162,8 @@ func applicationPassword(password string) string {
 	return string(result)
 }
 
+// encodeAccountResponse wraps account-authentication data in a size-bounded
+// Response envelope, preserving the recorder-owned correlation ID.
 func encodeAccountResponse(id uint16, code int, data any) ([]byte, error) {
 	body, err := json.Marshal(struct {
 		ResponseData any    `json:"responseData"`

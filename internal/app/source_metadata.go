@@ -18,7 +18,7 @@ type SourceMetadata struct {
 	Encoders     map[int]SourceEncoders
 }
 
-// SourceEncoders maps the native source index to its first main and extra format.
+// SourceEncoders holds the first main and extra format reported for one native source index.
 type SourceEncoders struct {
 	Main SourceEncoder
 	Sub  SourceEncoder
@@ -35,6 +35,7 @@ type SourceEncoder struct {
 	BitrateMode string
 }
 
+// metadata copies current source facts and their encoder map under the source mutex.
 func (s *source) metadata() SourceMetadata {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -46,6 +47,8 @@ func (s *source) metadata() SourceMetadata {
 	return result
 }
 
+// recordMetadata accepts successful DVRIP identity and Encode reads, retaining native lens
+// indexes and only known fields.
 func (s *source) recordMetadata(data any) {
 	row, _ := data.(map[string]any)
 	answer, _ := row["response"].(map[string]any)
@@ -94,6 +97,8 @@ func (s *source) recordIdentity(data any) {
 	s.metadataValue.BuildDate = metadataText(row["build_date"])
 }
 
+// sourceEncoder extracts the first native format, accepting only recognized codecs and
+// bitrate modes while leaving missing values unknown.
 func sourceEncoder(value any) SourceEncoder {
 	formats, ok := value.([]any)
 	if !ok || len(formats) == 0 {
@@ -122,6 +127,8 @@ func sourceEncoder(value any) SourceEncoder {
 	return result
 }
 
+// metadataText accepts at most 256 bytes without Unicode control characters and trims
+// surrounding whitespace.
 func metadataText(value any) string {
 	text, ok := value.(string)
 	if !ok || len(text) > 256 || strings.IndexFunc(text, unicode.IsControl) >= 0 {
@@ -130,6 +137,8 @@ func metadataText(value any) string {
 	return strings.TrimSpace(text)
 }
 
+// metadataNumber accepts finite positive JSON numbers no larger than MaxInt32; zero
+// represents unavailable or invalid metadata.
 func metadataNumber(value any) float64 {
 	number, ok := value.(json.Number)
 	if !ok {
@@ -142,6 +151,8 @@ func metadataNumber(value any) float64 {
 	return parsed
 }
 
+// metadataInteger accepts only integral source numbers, using zero for absent, fractional,
+// or invalid values.
 func metadataInteger(value any) int {
 	parsed := metadataNumber(value)
 	if parsed != math.Trunc(parsed) {

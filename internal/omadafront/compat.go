@@ -36,8 +36,11 @@ type Compatibility struct {
 	PTZModuleSpecKeys []string
 }
 
+// service pairs a virtual service name with its recorder-facing decimal port.
 type service struct{ name, port string }
 
+// networkConfigured requires a complete virtual IPv4 configuration before
+// adding the related WAN fields.
 func (c Compatibility) networkConfigured() bool {
 	return c.Netmask != "" && c.Gateway != "" && c.DNS != ""
 }
@@ -146,6 +149,8 @@ func (c Compatibility) extendIdentity(name string, body map[string]any, cameraNa
 	body["isp_sw_version"] = firmware
 }
 
+// virtualIdentifier derives an uppercase hexadecimal identity scoped by camera
+// name and field; callers must request at most the 64 available characters.
 func virtualIdentifier(cameraName, field string, length int) string {
 	sum := sha256.Sum256([]byte("any-to-omada/virtual-identity/" + field + "/" + cameraName))
 	return strings.ToUpper(hex.EncodeToString(sum[:]))[:length]

@@ -157,12 +157,15 @@ func memoryTLSServer(t *testing.T, handler http.Handler) (*httptest.Server, *mem
 	return server, listener
 }
 
+// memoryHTTPListener supplies in-memory connections to httptest and unblocks
+// acceptors when closed, without opening a real listener.
 type memoryHTTPListener struct {
 	connections chan net.Conn
 	closed      chan struct{}
 	once        sync.Once
 }
 
+// Accept waits for a supplied connection or reports a closed listener.
 func (l *memoryHTTPListener) Accept() (net.Conn, error) {
 	select {
 	case connection := <-l.connections:
@@ -172,11 +175,14 @@ func (l *memoryHTTPListener) Accept() (net.Conn, error) {
 	}
 }
 
+// Close releases blocked accepts exactly once and is safe to repeat.
 func (l *memoryHTTPListener) Close() error {
 	l.once.Do(func() { close(l.closed) })
 	return nil
 }
 
+// Addr supplies the loopback address required by the listener interface;
+// it does not describe a real bound TCP socket.
 func (l *memoryHTTPListener) Addr() net.Addr {
 	return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)}
 }

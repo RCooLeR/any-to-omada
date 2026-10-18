@@ -18,17 +18,20 @@ import (
 	"github.com/RCooLeR/any-to-omada/internal/capture"
 )
 
+// sinkRow retains one structured adapter write for assertions about protocol, kind, and payload.
 type sinkRow struct {
 	device, protocol, kind string
 	data                   any
 }
 
+// memorySink synchronizes captured writes and optionally signals keepalive records to the test owner.
 type memorySink struct {
 	mu        sync.Mutex
 	rows      []sinkRow
 	heartbeat chan struct{}
 }
 
+// Write appends a captured record and sends a nonblocking heartbeat signal when configured.
 func (s *memorySink) Write(device, protocol, kind string, data any) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -42,12 +45,14 @@ func (s *memorySink) Write(device, protocol, kind string, data any) error {
 	return nil
 }
 
+// snapshot returns a copy of the row slice so assertions do not race with writes.
 func (s *memorySink) snapshot() []sinkRow {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]sinkRow(nil), s.rows...)
 }
 
+// fakePeer wraps a local test connection with scripted DVRIP authentication and RPC responses.
 type fakePeer struct{ net.Conn }
 
 func startFake(t *testing.T, serve func(fakePeer) error) (capture.Device, <-chan error) {
@@ -74,6 +79,8 @@ func startFake(t *testing.T, serve func(fakePeer) error) (capture.Device, <-chan
 	return capture.Device{ID: "test-camera", Host: "127.0.0.1", NativePort: listener.Addr().(*net.TCPAddr).Port, Username: "viewer", Password: "example-only"}, result
 }
 
+// login checks the legacy challenge response against independently computed fixture digests
+// before accepting or rejecting it.
 func (p fakePeer) login(accepted bool) error {
 	challenge, err := readFrame(p)
 	if err != nil {
@@ -109,6 +116,7 @@ func (p fakePeer) login(accepted bool) error {
 	return writeFrame(p, reply, nil)
 }
 
+// request verifies the expected RPC method and authenticated session framing before returning its decoded body.
 func (p fakePeer) request(method string) (map[string]any, error) {
 	packet, err := readFrame(p)
 	if err != nil {
@@ -128,6 +136,7 @@ func (p fakePeer) request(method string) (map[string]any, error) {
 	return message, nil
 }
 
+// reply writes a correlated result in small fragments, optionally preceded by an event in the same frame.
 func (p fakePeer) reply(request map[string]any, params any, preceding string) error {
 	body, err := json.Marshal(map[string]any{"id": request["id"], "result": true, "params": params})
 	if err != nil {
@@ -146,10 +155,14 @@ func (p fakePeer) reply(request map[string]any, params any, preceding string) er
 	return nil
 }
 
+// setup accepts the normal metadata and subscription sequence while optionally injecting an
+// interleaved notification.
 func (p fakePeer) setup(notification string) error {
 	return p.setupMetadata(notification, false)
 }
 
+// setupMetadata scripts metadata failures and event attachment without changing the expected
+// capture request sequence.
 func (p fakePeer) setupMetadata(notification string, rejectMetadata bool) error {
 	for _, call := range []struct{ method, configName string }{
 		{"magicBox.getDeviceType", ""},
@@ -195,6 +208,7 @@ func (p fakePeer) setupMetadata(notification string, rejectMetadata bool) error 
 	return nil
 }
 
+// cleanup verifies that detach matches the All-code subscription and is followed by logout.
 func (p fakePeer) cleanup() error {
 	for _, method := range []string{"eventManager.detach", "global.logout"} {
 		request, err := p.request(method)
@@ -428,8 +442,10 @@ func TestRejectedAuthenticationDoesNotRetryOrSendRPC(t *testing.T) {
 
 var errSinkExhausted = errors.New("test sink exhausted")
 
+// exhaustedSink simulates a journal that refuses further records so capture cleanup can be verified.
 type exhaustedSink struct{}
 
+// Write always returns the fixture storage error to exercise adapter shutdown after sink failure.
 func (exhaustedSink) Write(string, string, string, any) error { return errSinkExhausted }
 
 func TestSinkFailureStopsFurtherReadsAndLogsOut(t *testing.T) {

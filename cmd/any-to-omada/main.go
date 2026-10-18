@@ -18,6 +18,7 @@ import (
 	"github.com/RCooLeR/any-to-omada/internal/config"
 )
 
+// main reports command failures and converts them to a nonzero process exit.
 func main() {
 	if err := execute(os.Args[1:]); err != nil {
 		slog.Error("translator command failed", "error", err)
@@ -25,6 +26,8 @@ func main() {
 	}
 }
 
+// execute dispatches validation, liveness and serving commands. Only serve
+// resolves camera credentials and starts device connections.
 func execute(args []string) error {
 	if len(args) == 0 {
 		return errors.New("use serve, check, healthcheck or version")

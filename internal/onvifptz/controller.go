@@ -55,6 +55,8 @@ type Status struct {
 	LastFailure   string `json:"last_failure,omitempty"`
 }
 
+// lensProfile caches validated service paths, supported coordinate spaces and
+// the camera-side timeout for the configured ONVIF media profile.
 type lensProfile struct {
 	ptzPath, configuration            string
 	panSpace, zoomSpace, absoluteZoom string
@@ -62,6 +64,8 @@ type lensProfile struct {
 	capability                        Capability
 }
 
+// command carries one pending movement or stop; sequence ordering prevents a
+// superseded command from acting after slow discovery completes.
 type command struct {
 	stop            bool
 	pan, tilt, zoom float64
@@ -163,6 +167,8 @@ func (c *Controller) Move(pan, tilt, zoom float64) {
 // Stop queues a stop of every axis.
 func (c *Controller) Stop() { c.submit(command{stop: true}) }
 
+// submit replaces pending work and cancels active request preparation. Closed
+// controllers reject the command; callers never wait for camera network I/O.
 func (c *Controller) submit(cmd command) {
 	c.mu.Lock()
 	if c.ctx.Err() != nil {
@@ -189,6 +195,8 @@ func (c *Controller) submit(cmd command) {
 	}
 }
 
+// complete reports a result to a synchronous preset caller; asynchronous
+// movement and stop commands have no completion channel.
 func (cmd *command) complete(err error) {
 	if cmd.result != nil {
 		cmd.result <- err
@@ -221,6 +229,8 @@ func (c *Controller) commandContext(cmd *command, timeout time.Duration) (contex
 	}, nil
 }
 
+// run serializes movement commands and watchdog stops. A sent movement stays
+// potentially active until Stop is acknowledged, including after transport errors.
 func (c *Controller) run() {
 	defer close(c.done)
 	defer func() {
@@ -397,6 +407,8 @@ func (c *Controller) stop(reason string) error {
 	return nil
 }
 
+// movement builds a preset, continuous or stepped absolute-zoom operation. An
+// absolute zoom step first reads the camera position; no movement is sent here.
 func (c *Controller) movement(ctx context.Context, p *lensProfile, cmd *command) (string, string, error) {
 	profile := "<t:ProfileToken>" + xmlText(c.profileToken) + "</t:ProfileToken>"
 	if cmd.preset != "" {
@@ -517,6 +529,7 @@ func (c *Controller) RemovePreset(ctx context.Context, token string) error {
 	return c.soap.call(ctx, p.ptzPath, ptzNamespace, "RemovePreset", "<t:ProfileToken>"+xmlText(c.profileToken)+"</t:ProfileToken><t:PresetToken>"+xmlText(token)+"</t:PresetToken>", nil)
 }
 
+// fail records a fixed error class in counters and logs without camera payloads.
 func (c *Controller) fail(operation string, err error) {
 	label := ErrorClass(err)
 	c.mu.Lock()
@@ -585,12 +598,18 @@ func (c *Controller) lens(ctx context.Context) (*lensProfile, error) {
 	return p, nil
 }
 
+// rangeXY distinguishes absent ONVIF axis limits from explicitly reported zeroes.
 type rangeXY struct{ Min, Max *float64 }
+
+// ptzSpace holds a camera-advertised coordinate system and its axis limits.
 type ptzSpace struct {
 	URI            string
 	XRange, YRange rangeXY
 }
 
+// discover reads same-origin services, profile and node capabilities without
+// moving the camera. Absolute zoom requires a reported position; the camera's
+// timeout range never changes the independent local movement watchdog.
 func (c *Controller) discover(ctx context.Context) (*lensProfile, error) {
 	c.soap.syncClock(ctx)
 	var services struct {
@@ -717,6 +736,8 @@ func velocitySpace(spaces []ptzSpace, panTilt bool) string {
 	return chosen
 }
 
+// positionSpace selects the first advertised zoom space covering normalized
+// positions 0..1, or returns empty when no such range exists.
 func positionSpace(spaces []ptzSpace) string {
 	for _, s := range spaces {
 		if s.URI != "" && len(s.URI) <= 256 && s.XRange.Min != nil && s.XRange.Max != nil && *s.XRange.Min <= 0 && *s.XRange.Max >= 1 {
@@ -728,6 +749,8 @@ func positionSpace(spaces []ptzSpace) string {
 
 var durationPattern = regexp.MustCompile(`^P(?:(\d+)D)?T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?$`)
 
+// parseDuration accepts ONVIF day/hour/minute/second durations up to one day;
+// unsupported forms and larger values cannot become a movement timeout.
 func parseDuration(value string) (time.Duration, bool) {
 	m := durationPattern.FindStringSubmatch(strings.TrimSpace(value))
 	if len(m) != 5 {

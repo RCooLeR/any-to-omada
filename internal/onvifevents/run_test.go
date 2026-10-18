@@ -20,16 +20,19 @@ import (
 	"github.com/RCooLeR/any-to-omada/internal/onvifsoap"
 )
 
+// write stores one adapter sink call for event and subscription assertions.
 type write struct {
 	protocol, kind string
 	data           any
 }
 
+// sink serializes collected adapter writes so test assertions can inspect an active PullPoint session.
 type sink struct {
 	mu     sync.Mutex
 	writes []write
 }
 
+// Write records the adapter protocol, journal kind, and payload under the sink lock.
 func (s *sink) Write(_, protocol, kind string, data any) error {
 	s.mu.Lock()
 	s.writes = append(s.writes, write{protocol, kind, data})
@@ -37,6 +40,7 @@ func (s *sink) Write(_, protocol, kind string, data any) error {
 	return nil
 }
 
+// events selects normalized event payloads from the collected records in arrival order.
 func (s *sink) events() []map[string]any {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -49,6 +53,7 @@ func (s *sink) events() []map[string]any {
 	return result
 }
 
+// count returns the number of journal records of one kind without racing with capture.
 func (s *sink) count(kind string) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -61,6 +66,8 @@ func (s *sink) count(kind string) int {
 	return n
 }
 
+// camera emulates local ONVIF discovery and PullPoint operations with configurable lens
+// inventories, faults, and vendor subscription quirks.
 type camera struct {
 	t           *testing.T
 	server      *httptest.Server
@@ -99,12 +106,14 @@ func message(topic, operation string, source, data map[string]string) string {
 		`<tt:Data>` + items(data) + `</tt:Data></tt:Message></wsnt:Message></wsnt:NotificationMessage>`
 }
 
+// queue appends one notification batch for the next simulated PullMessages response.
 func (c *camera) queue(messages ...string) {
 	c.mu.Lock()
 	c.batches = append(c.batches, messages)
 	c.mu.Unlock()
 }
 
+// seen counts captured calls to an operation under the fixture lock.
 func (c *camera) seen(op string) int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -117,6 +126,7 @@ func (c *camera) seen(op string) int {
 	return n
 }
 
+// serve records SOAP requests and dispatches the scripted discovery, notification, renewal, and cleanup responses.
 func (c *camera) serve(w http.ResponseWriter, r *http.Request) {
 	data, _ := io.ReadAll(r.Body)
 	body := string(data)
@@ -204,6 +214,7 @@ func (c *camera) serve(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// device exposes the local SOAP fixture endpoint and test-only account to the production adapter.
 func (c *camera) device() capture.Device {
 	host, port, _ := net.SplitHostPort(c.server.Listener.Addr().String())
 	number, _ := strconv.Atoi(port)

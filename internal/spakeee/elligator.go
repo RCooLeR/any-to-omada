@@ -55,6 +55,8 @@ func pointFromUniform(uniform []byte) (*edwards25519.Point, error) {
 	return new(edwards25519.Point).MultByCofactor(p), nil
 }
 
+// decodePoint accepts only canonical encodings of nonidentity prime-order
+// server points, rejecting small-order and mixed-order inputs.
 func decodePoint(encoded []byte) (*edwards25519.Point, error) {
 	p, err := new(edwards25519.Point).SetBytes(encoded)
 	if err != nil || subtle.ConstantTimeCompare(p.Bytes(), encoded) != 1 {
@@ -66,6 +68,8 @@ func decodePoint(encoded []byte) (*edwards25519.Point, error) {
 	return p, nil
 }
 
+// primeOrderPoint verifies that p is a nonidentity member of the prime-order
+// subgroup by comparing it with its cofactor projection.
 func primeOrderPoint(p *edwards25519.Point) bool {
 	// Project into the prime-order subgroup with [1/8]([8]P). Comparing
 	// against P rejects mixed-order points as well as the small-order group.

@@ -17,13 +17,18 @@ import (
 	"github.com/pion/rtp"
 )
 
+// failure separates retryable outages, permanent profile errors and account
+// rejections while retaining only a fixed diagnostic label.
 type failure struct {
 	reason                    string
 	authentication, permanent bool
 }
 
+// Error returns the sanitized label without the original upstream response.
 func (e *failure) Error() string { return e.reason }
 
+// classify assigns a retry policy from an RTSP error; generic failures retain
+// only the caller's fixed operation stage.
 func classify(stage string, err error) *failure {
 	result := &failure{reason: stage + "_failed"}
 	if _, ok := errors.AsType[liberrors.ErrClientAuthSetup](err); ok {
@@ -42,6 +47,8 @@ func classify(stage string, err error) *failure {
 	return result
 }
 
+// runProfile owns one reconnect loop with capped exponential backoff. A source
+// authentication rejection cancels both profiles to avoid repeated login attempts.
 func (s *Server) runProfile(p *profile) {
 	delay := s.cfg.RetryMin
 	for s.ctx.Err() == nil {
@@ -97,6 +104,9 @@ func (s *Server) runProfile(p *profile) {
 	s.mu.Unlock()
 }
 
+// attempt relays one upstream generation until it fails or is cancelled. It
+// publishes readiness only after video arrives and joins the producer before
+// retiring the stream; the boolean reports whether readiness was reached.
 func (s *Server) attempt(p *profile) (bool, *failure) {
 	ctx, cancel := context.WithCancel(s.ctx)
 	defer cancel()
@@ -229,6 +239,8 @@ func markerInserters(medias []*description.Media, state func() tpmarker.State) m
 	return result
 }
 
+// validDescription requires video and at most eight non-backchannel media,
+// keeping both raw and resolved track URLs on the configured camera origin.
 func (s *Server) validDescription(desc *description.Session) bool {
 	if desc == nil || !s.cfg.sameOrigin(desc.BaseURL) || len(desc.Medias) == 0 || len(desc.Medias) > 8 {
 		return false

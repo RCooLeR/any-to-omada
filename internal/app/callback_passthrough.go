@@ -8,6 +8,8 @@ import (
 	"github.com/RCooLeR/any-to-omada/internal/omadalink"
 )
 
+// decodeCallbackMessage checks method-specific object shapes and preserves error-code
+// presence so malformed commands cannot reach management dispatch.
 func decodeCallbackMessage(body json.RawMessage) (callbackMessage, error) {
 	var message callbackMessage
 	if err := json.Unmarshal(body, &message); err != nil {
@@ -67,6 +69,8 @@ func decodeCallbackMessage(body json.RawMessage) (callbackMessage, error) {
 	return message, nil
 }
 
+// decodeCallbackData rejects missing method payloads and prefixes JSON type-error fields for
+// bounded diagnostics.
 func decodeCallbackData(raw json.RawMessage, target any, field string) error {
 	if len(raw) == 0 {
 		return omadalink.ErrInvalidFrame
@@ -84,6 +88,8 @@ func decodeCallbackData(raw json.RawMessage, target any, field string) error {
 	return nil
 }
 
+// writePassthrough dispatches a validated tunneled management request and writes its
+// correlated response; the session owner must authenticate the caller first.
 func (c *callback) writePassthrough(conn net.Conn, message callbackMessage) string {
 	request, err := omadalink.DecodePassthroughRequest(message.RequestData)
 	if err != nil {

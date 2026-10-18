@@ -23,6 +23,8 @@ type VideoMetadata struct {
 	BitrateMode                              string
 }
 
+// selectorNames normalizes a scalar selector or bounded nonempty selector
+// list, rejecting names over 128 bytes.
 func selectorNames(raw json.RawMessage) ([]string, bool) {
 	var name string
 	if json.Unmarshal(raw, &name) == nil && name != "" && len(name) <= 128 {
@@ -40,6 +42,8 @@ func selectorNames(raw json.RawMessage) ([]string, bool) {
 	return names, true
 }
 
+// readSection resolves supported management leaves from source facts or
+// virtual state; optional PTZ capability discovery can contact the source.
 func (s *Server) readSection(module, name string, metadata Metadata) (any, bool) {
 	switch {
 	case module == "function" && name == "module_spec":
@@ -128,6 +132,8 @@ func (s *Server) readSection(module, name string, metadata Metadata) (any, bool)
 	}
 }
 
+// upnpServiceStatus describes advertised virtual services as unmapped, using
+// recorder-facing addresses and ports rather than backend listener addresses.
 func (s *Server) upnpServiceStatus() []any {
 	// The donor reports known services even when no UPnP mapping exists.
 	// Describe only the implemented virtual listeners, using recorder-facing
@@ -142,6 +148,8 @@ func (s *Server) upnpServiceStatus() []any {
 	return rows
 }
 
+// deviceInfo combines source model/firmware facts with the translator identity
+// and optional virtual compatibility fields without borrowing a donor identity.
 func (s *Server) deviceInfo(name string, metadata Metadata) map[string]any {
 	model := "AnyToOmada"
 	if metadata.Model != "" {
@@ -170,6 +178,9 @@ func (s *Server) deviceInfo(name string, metadata Metadata) map[string]any {
 	return body
 }
 
+// fields converts source encoding facts to Omada leaves after the caller validates
+// the codec and positive dimensions. Unknown optional values and unsupported
+// fractional frame-rate representations are omitted.
 func (p VideoMetadata) fields() map[string]any {
 	body := map[string]any{"encode_type": p.Codec, "resolution": strconv.Itoa(p.Width) + "*" + strconv.Itoa(p.Height)}
 	if p.BitrateKbps > 0 {
