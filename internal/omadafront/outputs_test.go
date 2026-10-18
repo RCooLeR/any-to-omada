@@ -144,12 +144,10 @@ func TestNativeOutputValidationRejectsCompositeAndAutomaticWrites(t *testing.T) 
 }
 
 func TestNativeOutputsRemoveUnsupportedDonorOffers(t *testing.T) {
-	for _, outputs := range []*fakeOutputs{nil, {capability: OutputCapability{LightAlarm: true, AlarmDuration: 5 * time.Second}}} {
+	for _, outputs := range []*fakeOutputs{{capability: OutputCapability{WhiteLight: true}}, {capability: OutputCapability{LightAlarm: true, AlarmDuration: 5 * time.Second}}} {
 		s := testServer(t, func(cfg *Config) {
 			cfg.Compatibility.ObservedModuleSpec = true
-			if outputs != nil {
-				cfg.Outputs = outputs
-			}
+			cfg.Outputs = outputs
 		})
 		value := passthroughValue(t, s, `{"method":"get","function":{"name":"module_spec"}}`)
 		spec := value["function"].(map[string]any)["module_spec"].(map[string]any)
@@ -158,12 +156,9 @@ func TestNativeOutputsRemoveUnsupportedDonorOffers(t *testing.T) {
 				t.Fatalf("unimplemented capability %s still advertised", key)
 			}
 		}
-		if outputs == nil {
+		if outputs.capability.WhiteLight {
 			if spec["msg_alarm_separate_list"] != nil || spec["msg_alarm_ver"] != nil {
-				t.Fatal("nil output controller advertises alarm controls")
-			}
-			if value := passthroughValue(t, s, `{"method":"do","msg_alarm":{"manual_msg_alarm":{"action":"start"}}}`); value["error_code"] != float64(unsupportedCode) {
-				t.Fatal("nil output controller accepted alarm start")
+				t.Fatal("steady-light controller advertises alarm controls")
 			}
 		} else if !reflect.DeepEqual(spec["msg_alarm_separate_list"], []any{"light"}) || spec["msg_alarm_ver"] != "1.0" {
 			t.Fatalf("capability does not match supported light-only mode: %v", spec)

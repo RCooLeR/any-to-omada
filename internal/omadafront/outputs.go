@@ -47,13 +47,16 @@ func (s *Server) outputCapability() OutputCapability {
 	return s.outputs.Capabilities()
 }
 
-// outputModuleSpec removes copied donor offers and advertises only implemented,
-// explicitly configured manual output modes. Detection linkage stays independent.
+// outputModuleSpec limits opted-in output offers to implemented manual modes.
+// Unconfigured cameras retain the observed enrollment compatibility profile.
 func (s *Server) outputModuleSpec(spec map[string]any) {
+	capability := s.outputCapability()
+	if !capability.WhiteLight && !capability.SoundAlarm && !capability.LightAlarm {
+		return
+	}
 	for _, key := range []string{"msg_alarm_list", "msg_alarm_separate_list", "msg_alarm_ver", "sound_alarm_version", "light_alarm_version", "usr_def_audio_alarm"} {
 		delete(spec, key)
 	}
-	capability := s.outputCapability()
 	modes := []string{}
 	if capability.SoundAlarm {
 		modes = append(modes, "sound")

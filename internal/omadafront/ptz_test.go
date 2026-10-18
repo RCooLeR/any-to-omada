@@ -399,7 +399,15 @@ func TestUnknownOperationsAreLoggedByNameOnly(t *testing.T) {
 	var output bytes.Buffer
 	s := testServer(t, func(cfg *Config) {
 		cfg.PTZ = &fakePTZ{}
-		cfg.Logger = slog.New(slog.NewJSONHandler(&output, nil))
+		cfg.Logger = slog.New(slog.NewJSONHandler(&output, &slog.HandlerOptions{
+			ReplaceAttr: func(groups []string, attr slog.Attr) slog.Attr {
+				// Wall-clock fractions can contain a forbidden input value.
+				if len(groups) == 0 && attr.Key == slog.TimeKey {
+					return slog.Attr{}
+				}
+				return attr
+			},
+		}))
 	})
 	value := passthroughValue(t, s, `{"method":"do","ptz":{"opt_quick_tour":{"chn_id":3,"tour_name":"private-tour","password":"private-value","position":{"pan":"0.4","tilt":"x"}}}}`)
 	if value["error_code"] != float64(unsupportedCode) {
@@ -411,6 +419,9 @@ func TestUnknownOperationsAreLoggedByNameOnly(t *testing.T) {
 	}
 	if err := json.Unmarshal(output.Bytes(), &fields); err != nil {
 		t.Fatal(err)
+	}
+	if fields.Operation != "unknown" {
+		t.Fatalf("operation = %q", fields.Operation)
 	}
 	want := []string{"ptz.opt_quick_tour{chn_id,redacted,position{pan,tilt},tour_name}"}
 	if !reflect.DeepEqual(fields.Shape, want) {

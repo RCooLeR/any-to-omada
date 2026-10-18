@@ -1,6 +1,6 @@
 # Physical controls
 
-Version 0.4.0 provides opt-in recorder pan/tilt, manual sound/light alarms, and source-backed illumination settings. Each virtual camera must be mapped to the correct physical lens. A model name or a generic ONVIF PTZ node does not prove that a camera has a motor, lamp, or siren.
+Version 0.4.1 provides opt-in recorder pan/tilt, manual sound/light alarms, and source-backed illumination settings. Each virtual camera must be mapped to the correct physical lens. A model name or a generic ONVIF PTZ node does not prove that a camera has a motor, lamp, or siren. Introduce new controls on one camera and verify recorder stability before extending the configuration.
 
 ## Configure supported hardware
 
@@ -33,7 +33,7 @@ ONVIF `max_move_seconds` defaults to 10; native DVRIP defaults to 2. Both accept
 
 Native `ptz.continuous_move` and `ptz.stop` reach the selected physical backend. Successful PTZ replies mean the command was queued. The watchdog attempts Stop if the recorder does not send it. Native preset-list requests remain unsupported: the earlier fabricated response correlated with recorder system errors. Zoom, presets, tours, absolute movement and relative movement are not advertised.
 
-Manual alarms use `do msg_alarm.manual_msg_alarm` with `action: start` or `stop`. The start reply includes a numeric `timer` only after the source accepts the command. The Stop deadline starts when activation is attempted; a delayed acknowledgement does not extend it. `msg_alarm.chn1_msg_alarm_info` selects the enabled sound/light outputs for this manual action. Automatic event arming, schedules, custom recordings, repeat counts, siren volume and flash-frequency changes are not implemented and are rejected. Unsupported donor alarm advertisements are removed.
+Manual alarms use `do msg_alarm.manual_msg_alarm` with `action: start` or `stop`. The start reply includes a numeric `timer` only after the source accepts the command. The Stop deadline starts when activation is attempted; a delayed acknowledgement does not extend it. `msg_alarm.chn1_msg_alarm_info` selects the enabled sound/light outputs for this manual action. Automatic event arming, schedules, custom recordings, repeat counts, siren volume and flash-frequency changes are not implemented and are rejected. Unsupported donor alarm advertisements are removed only on cameras with explicitly configured outputs; cameras without those controls retain their enrollment compatibility profile.
 
 Persistent illumination uses the recorder's image/night-vision settings, rather than a temporary alarm-light pulse:
 
@@ -45,6 +45,8 @@ Persistent illumination uses the recorder's image/night-vision settings, rather 
 | `ir_always_on` | Infrared scheme, manual lamp mode |
 
 The `image.common.smartwtl` and `smartwtl_digital_level` settings select automatic/manual white intensity and a 0–100 percentage. Brightness changes preserve the current illumination scheme. Successful writes require source readback; failed partial writes attempt to restore only fields still owned by the request. These are intentional persistent configuration changes and survive translator restart.
+
+Passive recorder reads use a validated source snapshot refreshed in the background every 10 seconds. They never wait for source I/O. Physical settings are omitted before the first successful refresh, after a failed refresh, or once the snapshot is 30 seconds old. Writes invalidate the snapshot and request a fresh readback. Only explicitly configured illumination cameras advertise the implemented lamp capability sections and supported night-vision modes.
 
 The Dahua source RPC uses the base names `Lighting_V2` and `LightingScheme` with complete device tables, matching the camera's shipped UI. Indexed config names are not scalar selectors on the verified firmware. Before each write or restoration, the adapter reads a fresh table, checks the selected fields, and changes only the requested channel/profile values while retaining the other settings. It never replays an old whole-device snapshot. Source operations are serialized within the translator; a separate camera client can still race the device's read/write interface.
 

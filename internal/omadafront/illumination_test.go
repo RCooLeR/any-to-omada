@@ -3,6 +3,7 @@ package omadafront
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 )
 
@@ -122,8 +123,31 @@ func TestNativeIlluminationRejectsWholeInvalidBatchBeforeSourceIO(t *testing.T) 
 				t.Fatalf("failed source write changed virtual settings: %v %v", value, fields)
 			}
 			value = send(`{"method":"get","image":{"name":"switch"}}`)
-			if value["error_code"] != float64(unsupportedCode) {
-				t.Fatalf("source read failure reported a lighting state: %v", value)
+			known := value["image"].(map[string]any)["switch"].(map[string]any)
+			if value["error_code"] != float64(0) || len(known) != 1 || known["flicker"] != "50hz" {
+				t.Fatalf("source read failure lost virtual flicker or fabricated lighting state: %v", value)
+			}
+		})
+	}
+}
+
+func TestNativeIlluminationUnavailablePreservesOnlyVirtualFlicker(t *testing.T) {
+	for _, transport := range []string{"https", "callback"} {
+		t.Run(transport, func(t *testing.T) {
+			illumination := &fakeIllumination{capability: IlluminationCapability{Modes: []string{"white_led_always_on"}, Brightness: true}, fail: true}
+			s := testServer(t, func(cfg *Config) { cfg.Illumination = illumination })
+			send := outputTransport(t, s, transport)
+			if value := send(`{"method":"set","image":{"switch":{"flicker":"60hz"}}}`); value["error_code"] != float64(0) {
+				t.Fatal("independent virtual flicker setting was rejected")
+			}
+			value := send(`{"method":"get","image":{"name":["switch","common"]},"network":{"name":"wan_status"}}`)
+			image, _ := value["image"].(map[string]any)
+			fields, _ := image["switch"].(map[string]any)
+			if value["error_code"] != float64(0) || value["network"] == nil || len(image) != 1 || len(fields) != 1 || fields["flicker"] != "60hz" {
+				t.Fatalf("unavailable source changed independent state or exposed unknown lighting: %v", value)
+			}
+			if value := send(`{"method":"get","image":{"name":"common"}}`); value["error_code"] != float64(unsupportedCode) {
+				t.Fatalf("unavailable source reported white intensity: %v", value)
 			}
 		})
 	}
@@ -155,5 +179,73 @@ func TestNativeIlluminationEmptyModesDisablePhysicalWrites(t *testing.T) {
 	value = passthroughValue(t, s, `{"method":"get","image_capability":{"name":"supplement_lamp"}}`)
 	if value["error_code"] != float64(unsupportedCode) {
 		t.Fatalf("empty supported policy set advertised illumination: %v", value)
+	}
+}
+
+func TestNativeIlluminationDiscoveryMatchesImplementedCapabilitySections(t *testing.T) {
+	// The native donor uses string flags and string-array lamp/range fields.
+	// Its mixed known/unknown selector reply succeeds with known leaves only.
+	for _, transport := range []string{"https", "callback"} {
+		for _, tc := range []struct {
+			name       string
+			capability IlluminationCapability
+			lamps      []any
+			ranges     []any
+			sections   []any
+		}{
+			{name: "infrared", capability: IlluminationCapability{Modes: []string{"auto_ir", "ir_always_on"}},
+				lamps: []any{"infrared_lamp"}, ranges: []any{"inf_night_vision"}, sections: []any{"supplement_lamp"}},
+			{name: "white", capability: IlluminationCapability{Modes: []string{"white_led_always_on", "auto_color"}, Brightness: true},
+				lamps: []any{"white_lamp"}, ranges: []any{"wtl_night_vision"}, sections: []any{"supplement_lamp", "smart_white_lamp"}},
+			{name: "both", capability: IlluminationCapability{Modes: []string{"white_led_always_on", "auto_color", "auto_ir", "ir_always_on", "auto_ir", "unknown"}, Brightness: true},
+				lamps: []any{"infrared_lamp", "white_lamp"}, ranges: []any{"inf_night_vision", "wtl_night_vision"}, sections: []any{"supplement_lamp", "smart_white_lamp"}},
+		} {
+			t.Run(transport+"/"+tc.name, func(t *testing.T) {
+				illumination := &fakeIllumination{capability: tc.capability}
+				s := testServer(t, func(cfg *Config) {
+					cfg.Compatibility.ObservedModuleSpec = true
+					cfg.Illumination = illumination
+				})
+				send := outputTransport(t, s, transport)
+				value := send(`{"method":"get","function":{"name":"module_spec"}}`)
+				spec := value["function"].(map[string]any)["module_spec"].(map[string]any)
+				if spec["image_capability"] != "1" || !reflect.DeepEqual(spec["image_list"], tc.sections) {
+					t.Fatalf("image discovery advertised unimplemented sections: %v", spec["image_list"])
+				}
+				value = send(`{"method":"get","image_capability":{"name":["expose","supplement_lamp","smart_white_lamp","image_style","advanced","preview_full_color","deliberately_unknown_probe"]}}`)
+				want := map[string]any{"supplement_lamp": map[string]any{
+					"supplement_lamp_type": tc.lamps, "night_vision_mode_range": tc.ranges,
+					"support_pre_night_vision_mode_version": "1.0", "full_color_people_support": "0", "full_color_vehicle_support": "0",
+				}}
+				if tc.capability.Brightness {
+					want["smart_white_lamp"] = map[string]any{"smart_white_lamp_supported": "1", "smartwtl_digital_level_supported": "1"}
+				}
+				if value["error_code"] != float64(0) || !reflect.DeepEqual(value["image_capability"], want) {
+					t.Fatalf("native capability types/ranges or mixed-read semantics changed: %v", value)
+				}
+				if illumination.readCalls != 0 || len(illumination.changes) != 0 {
+					t.Fatal("static capability discovery contacted the physical source")
+				}
+			})
+		}
+	}
+}
+
+func TestNativeIlluminationInactiveLeavesDiscoveryUnchanged(t *testing.T) {
+	for _, transport := range []string{"https", "callback"} {
+		t.Run(transport, func(t *testing.T) {
+			baseline := testServer(t, func(cfg *Config) { cfg.Compatibility.ObservedModuleSpec = true })
+			want := outputTransport(t, baseline, transport)(`{"method":"get","function":{"name":"module_spec"}}`)
+			for _, capability := range []IlluminationCapability{{}, {Modes: []string{"unknown"}, Brightness: true}} {
+				s := testServer(t, func(cfg *Config) {
+					cfg.Compatibility.ObservedModuleSpec = true
+					cfg.Illumination = &fakeIllumination{capability: capability}
+				})
+				got := outputTransport(t, s, transport)(`{"method":"get","function":{"name":"module_spec"}}`)
+				if !reflect.DeepEqual(got, want) {
+					t.Fatal("inactive illumination changed existing camera discovery")
+				}
+			}
+		})
 	}
 }

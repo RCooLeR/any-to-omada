@@ -29,12 +29,42 @@ type cameraIllumination struct {
 	light   illuminationControl
 	gate    *sourceControlGate
 	logger  *slog.Logger
-	// mu guards failure state only; device I/O uses the shared source gate.
+	ctx     context.Context
+	cancel  context.CancelFunc
+	done    chan struct{}
+	refresh chan struct{}
+	ready   chan struct{}
+	start   sync.Once
+	// mu guards lifecycle, failure state and the passive settings snapshot.
+	// Device I/O and snapshot publication share the physical source gate.
 	mu                     sync.Mutex
 	restorationUnconfirmed bool
 	closing                bool
 	active                 sync.WaitGroup
+	snapshot               omadafront.IlluminationSettings
+	snapshotAt             time.Time
 }
+
+const (
+	illuminationRefreshInterval  = 10 * time.Second
+	illuminationSnapshotLifetime = 30 * time.Second
+	illuminationReadTimeout      = 4 * time.Second
+)
+
+var errIlluminationSnapshotUnavailable = errors.New("illumination source snapshot unavailable")
+
+// newCameraIllumination owns an idle refresh worker. Start releases it after
+// startup validation; cancellation also releases a worker that was never started.
+func newCameraIllumination(parent context.Context, cfg *config.WhiteLight, channel int, light illuminationControl, gate *sourceControlGate, logger *slog.Logger) *cameraIllumination {
+	ctx, cancel := context.WithCancel(parent)
+	c := &cameraIllumination{cfg: cfg, channel: channel, light: light, gate: gate, logger: logger,
+		ctx: ctx, cancel: cancel, done: make(chan struct{}), refresh: make(chan struct{}, 1), ready: make(chan struct{})}
+	go c.refreshLoop()
+	return c
+}
+
+// Start begins asynchronous source refresh after local listener validation.
+func (c *cameraIllumination) Start() { c.start.Do(func() { close(c.ready) }) }
 
 // illuminationStatus preserves uncertain persistent writes until a later
 // intentional write succeeds; a successful read alone does not imply recovery.
@@ -54,22 +84,24 @@ func (c *cameraIllumination) Capabilities() omadafront.IlluminationCapability {
 	return omadafront.IlluminationCapability{Modes: slices.Clone(c.cfg.RecorderModes), Brightness: true, AutomaticBrightness: true}
 }
 
-// Settings preserves unknown native source policies as an omitted mode rather
-// than falsely reporting OFF or changing a smart lighting policy on read.
+// Settings returns only a recent validated snapshot. It never contacts or waits
+// for a source, so recorder enrollment and callback heartbeats cannot be held
+// behind source discovery. Cold, expired and failed snapshots remain unknown.
 func (c *cameraIllumination) Settings(ctx context.Context) (omadafront.IlluminationSettings, error) {
-	if !c.begin() {
-		return omadafront.IlluminationSettings{}, errControlUnsupported
-	}
-	defer c.active.Done()
-	if err := c.acquire(); err != nil {
+	if err := ctx.Err(); err != nil {
 		return omadafront.IlluminationSettings{}, err
 	}
-	defer func() { <-c.gate.busy }()
-	current, err := c.light.ModeSettings(ctx, c.channel, c.cfg.Profile)
-	if err != nil {
-		c.failure(err)
-		return omadafront.IlluminationSettings{}, err
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closing || c.ctx.Err() != nil || c.snapshotAt.IsZero() || time.Since(c.snapshotAt) >= illuminationSnapshotLifetime {
+		return omadafront.IlluminationSettings{}, errIlluminationSnapshotUnavailable
 	}
+	return c.snapshot, nil
+}
+
+// sourceSettings preserves an unmapped policy as an omitted mode rather than
+// inventing OFF, and rejects malformed source brightness or lamp modes.
+func (c *cameraIllumination) sourceSettings(current dvripcapture.LightingModeSettings) (omadafront.IlluminationSettings, error) {
 	mode := ""
 	switch {
 	case current.Scheme == "WhiteMode" && current.WhiteMode == "Manual":
@@ -84,10 +116,77 @@ func (c *cameraIllumination) Settings(ctx context.Context) (omadafront.Illuminat
 	if !slices.Contains(c.cfg.RecorderModes, mode) {
 		mode = ""
 	}
-	if current.WhiteMode != "Manual" && current.WhiteMode != "Auto" {
+	if (current.WhiteMode != "Manual" && current.WhiteMode != "Auto") || current.Brightness < 0 || current.Brightness > 100 {
 		return omadafront.IlluminationSettings{}, errControlUnsupported
 	}
 	return omadafront.IlluminationSettings{Mode: mode, Brightness: current.Brightness, AutomaticBrightness: current.WhiteMode == "Auto"}, nil
+}
+
+// refreshLoop owns initial, periodic and post-write snapshot reads. At most one
+// refresh exists, and no caller waits for it to finish.
+func (c *cameraIllumination) refreshLoop() {
+	defer close(c.done)
+	select {
+	case <-c.ctx.Done():
+		return
+	case <-c.ready:
+	}
+	ticker := time.NewTicker(illuminationRefreshInterval)
+	defer ticker.Stop()
+	for {
+		if c.ctx.Err() != nil {
+			return
+		}
+		c.refreshSnapshot()
+		select {
+		case <-c.ctx.Done():
+			return
+		case <-ticker.C:
+		case <-c.refresh:
+		}
+	}
+}
+
+// refreshSnapshot publishes before releasing source admission. A later Set
+// therefore invalidates this result after acquiring the same gate, never before.
+func (c *cameraIllumination) refreshSnapshot() {
+	if err := c.acquire(); err != nil {
+		if !errors.Is(err, errSourceControlBusy) {
+			c.invalidateSnapshot()
+		}
+		return
+	}
+	defer func() { <-c.gate.busy }()
+	ctx, cancel := context.WithTimeout(c.ctx, illuminationReadTimeout)
+	defer cancel()
+	current, err := c.light.ModeSettings(ctx, c.channel, c.cfg.Profile)
+	var snapshot omadafront.IlluminationSettings
+	if err == nil {
+		snapshot, err = c.sourceSettings(current)
+	}
+	c.failure(err)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if err != nil || c.closing || c.ctx.Err() != nil {
+		c.snapshotAt = time.Time{}
+		return
+	}
+	c.snapshot, c.snapshotAt = snapshot, time.Now()
+}
+
+// invalidateSnapshot makes uncertain or superseded source settings unavailable.
+func (c *cameraIllumination) invalidateSnapshot() {
+	c.mu.Lock()
+	c.snapshotAt = time.Time{}
+	c.mu.Unlock()
+}
+
+// requestRefresh coalesces writes into one immediate read after source release.
+func (c *cameraIllumination) requestRefresh() {
+	select {
+	case c.refresh <- struct{}{}:
+	default:
+	}
 }
 
 // Set validates the entire requested policy/brightness combination before
@@ -97,6 +196,9 @@ func (c *cameraIllumination) Set(ctx context.Context, change omadafront.Illumina
 		return errControlUnsupported
 	}
 	defer c.active.Done()
+	request, cancel := context.WithCancel(ctx)
+	stopCancellation := context.AfterFunc(c.ctx, cancel)
+	defer func() { stopCancellation(); cancel() }()
 	if change.Mode != "" && !slices.Contains(c.cfg.RecorderModes, change.Mode) {
 		return errControlUnsupported
 	}
@@ -124,8 +226,12 @@ func (c *cameraIllumination) Set(ctx context.Context, change omadafront.Illumina
 	if err := c.acquire(); err != nil {
 		return err
 	}
-	defer func() { <-c.gate.busy }()
-	err := c.light.ApplyMode(ctx, c.channel, c.cfg.Profile, native)
+	defer func() {
+		<-c.gate.busy
+		c.requestRefresh()
+	}()
+	c.invalidateSnapshot()
+	err := c.light.ApplyMode(request, c.channel, c.cfg.Profile, native)
 	c.failure(err)
 	c.mu.Lock()
 	if err == nil {
@@ -167,18 +273,20 @@ func (c *cameraIllumination) failure(err error) {
 func (c *cameraIllumination) begin() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.closing {
+	if c.closing || c.ctx.Err() != nil {
 		return false
 	}
 	c.active.Add(1)
 	return true
 }
 
-// Close prevents new operations and joins independent source rollback after
-// the HTTP server has cancelled the originating request.
+// Close cancels refresh and write contexts, then joins the worker and independent
+// source rollback before this camera's controls are discarded.
 func (c *cameraIllumination) Close() {
 	c.mu.Lock()
 	c.closing = true
 	c.mu.Unlock()
+	c.cancel()
+	<-c.done
 	c.active.Wait()
 }

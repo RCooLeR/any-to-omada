@@ -29,7 +29,7 @@ import (
 )
 
 // Version is the service version.
-const Version = "0.4.0"
+const Version = "0.4.1"
 
 // camera owns the listeners, media relay, native callback, and optional physical controls
 // for one configured virtual lens.
@@ -199,8 +199,9 @@ func Run(parent context.Context, cfg config.Config, logger *slog.Logger) (runErr
 		var outputs omadafront.OutputControls
 		var illumination omadafront.IlluminationControls
 		if light := configured.WhiteLight; light != nil && len(light.RecorderModes) > 0 {
-			cam.illumination = &cameraIllumination{cfg: light, channel: configured.SourceIndex, gate: controlGates[source.ID], logger: logger.With("camera_id", configured.ID),
-				light: dvripcapture.NewLighting(capture.Device{ID: source.ID, Host: source.Host, NativePort: source.NativePort, Username: source.Account.Username, Password: passwords[source.ID]})}
+			cam.illumination = newCameraIllumination(ctx, light, configured.SourceIndex,
+				dvripcapture.NewLighting(capture.Device{ID: source.ID, Host: source.Host, NativePort: source.NativePort, Username: source.Account.Username, Password: passwords[source.ID]}),
+				controlGates[source.ID], logger.With("camera_id", configured.ID))
 			illumination = cam.illumination
 		}
 		if d := configured.Deterrence; d != nil {
@@ -331,6 +332,14 @@ func Run(parent context.Context, cfg config.Config, logger *slog.Logger) (runErr
 		}
 		if err := camera.media.Start(ctx); err != nil {
 			return errors.New("start virtual media failed")
+		}
+	}
+	for _, camera := range cameras {
+		if !camera.cfg.Enabled {
+			continue
+		}
+		if camera.illumination != nil {
+			camera.illumination.Start()
 		}
 		serve(camera.server, tls.NewListener(restrict(camera.listener, camera.cfg.AllowedTransportPeers), camera.tls))
 	}

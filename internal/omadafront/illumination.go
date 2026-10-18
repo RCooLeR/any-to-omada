@@ -74,6 +74,24 @@ func validIlluminationMode(mode string) bool {
 	}
 }
 
+// illuminationModuleSpec replaces the copied image catalog only for an opted-in
+// source, listing capability sections that this delegate actually implements.
+func (s *Server) illuminationModuleSpec(spec map[string]any) {
+	if len(s.illuminationCapability().Modes) == 0 {
+		return
+	}
+	sections := []string{}
+	for _, name := range []string{"supplement_lamp", "smart_white_lamp"} {
+		if _, supported := s.illuminationRead("image_capability", name); supported {
+			sections = append(sections, name)
+		}
+	}
+	if len(sections) > 0 {
+		spec["image_capability"] = "1"
+		spec["image_list"] = sections
+	}
+}
+
 // illuminationRead reports only live source settings and supported capabilities.
 // Failed image reads never fall back to a fabricated persistent lighting mode.
 func (s *Server) illuminationRead(module, name string) (any, bool) {
@@ -94,7 +112,8 @@ func (s *Server) illuminationRead(module, name string) (any, bool) {
 			if len(lamps) == 0 {
 				return nil, false
 			}
-			fields := map[string]any{"supplement_lamp_type": lamps, "support_pre_night_vision_mode_version": "1.0"}
+			fields := map[string]any{"supplement_lamp_type": lamps, "support_pre_night_vision_mode_version": "1.0",
+				"night_vision_mode_range": illuminationNightModes(capability.Modes), "full_color_people_support": "0", "full_color_vehicle_support": "0"}
 			if s.outputCapability().WhiteLight {
 				fields["white_light_manual_version"] = "1.0"
 			}
@@ -113,6 +132,11 @@ func (s *Server) illuminationRead(module, name string) (any, bool) {
 	defer cancel()
 	settings, err := s.illumination.Settings(ctx)
 	if err != nil || (settings.Mode != "" && !slices.Contains(capability.Modes, settings.Mode)) || settings.Brightness < 0 || settings.Brightness > 100 {
+		if name == "switch" {
+			// Flicker is independent virtual state, still known when source
+			// lamp settings are cold, stale or unavailable. Do not add modes.
+			return s.virtualImaging.read("image", "switch")
+		}
 		return nil, false
 	}
 	if name == "switch" {
@@ -149,6 +173,21 @@ func illuminationNightMode(mode string) string {
 	default:
 		return ""
 	}
+}
+
+// illuminationNightModes preserves the native range order and includes only
+// lamp policies represented by explicitly supported source modes.
+func illuminationNightModes(modes []string) []string {
+	native := []string{}
+	for _, value := range []string{"inf_night_vision", "wtl_night_vision", "md_night_vision"} {
+		for _, mode := range modes {
+			if illuminationNightMode(mode) == value {
+				native = append(native, value)
+				break
+			}
+		}
+	}
+	return native
 }
 
 // illuminationRequest validates the entire image/video batch before source I/O.

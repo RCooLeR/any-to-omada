@@ -70,6 +70,7 @@ func (s *Server) readSection(module, name string, metadata Metadata) (any, bool)
 			}
 		}
 		s.outputModuleSpec(spec)
+		s.illuminationModuleSpec(spec)
 		return spec, true
 	case module == "ptz" && name == "capability" && s.ptz != nil:
 		ctx, cancel := context.WithTimeout(context.Background(), ptzCallTimeout)
