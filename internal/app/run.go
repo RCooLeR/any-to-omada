@@ -27,7 +27,7 @@ import (
 )
 
 // Version is the service version.
-const Version = "0.3.0"
+const Version = "0.3.2"
 
 // camera owns the listeners, media relay, native callback, and optional physical controls
 // for one configured virtual lens.

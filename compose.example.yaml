@@ -5,7 +5,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: any-to-omada:0.3.0
+    image: any-to-omada:0.3.2
     restart: unless-stopped
     # Replace the host-side loopback address with the intended LAN address
     # before connecting a router/NVR. One published pair per virtual camera.

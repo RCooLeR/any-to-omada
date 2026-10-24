@@ -64,7 +64,7 @@ func (s *Server) readSection(module, name string, metadata Metadata) (any, bool)
 	case module == "ptz" && name == "capability" && s.ptz != nil:
 		ctx, cancel := context.WithTimeout(context.Background(), ptzCallTimeout)
 		defer cancel()
-		return s.ptzCapabilityFields(ctx)
+		return s.nativePTZCapabilityFields(ctx)
 	case module == "network" && name == "wan_status":
 		// This describes the reachable virtual management interface, not the
 		// source camera's physical link or its unobserved network settings.

@@ -5,7 +5,7 @@ Each component retains its own license and copyright. The project's MIT license
 does not replace these terms.
 
 Scope: the runtime dependency closure of cmd/any-to-omada with CGO_ENABLED=0
-for linux/amd64, linux/arm64, and windows/amd64, using Go 1.27.2. Test-only
+for linux/amd64, linux/arm64, and windows/amd64, using Go 1.27.3. Test-only
 and unused transitive modules are not included. Go runtime and standard-library
 notices are also retained for static binary distributions. Some listed source
 may be eliminated by the linker. Recheck this inventory when dependencies,
@@ -28,14 +28,14 @@ Runtime Go modules:
   github.com/gorilla/websocket v1.5.3
   github.com/pion/logging v0.2.4
   github.com/pion/randutil v0.1.0
-  github.com/pion/rtcp v1.2.19
-  github.com/pion/rtp v1.10.5
+  github.com/pion/rtcp v1.2.20
+  github.com/pion/rtp v1.10.6
   github.com/pion/sdp/v3 v3.0.20
   github.com/pion/srtp/v3 v3.1.3
   github.com/pion/transport/v5 v5.1.1
-  golang.org/x/crypto v0.57.0
-  golang.org/x/net v0.59.0
-  golang.org/x/sys v0.48.0
+  golang.org/x/crypto v0.58.0
+  golang.org/x/net v0.61.0
+  golang.org/x/sys v0.49.0
 
 ==============================================================================
 filippo.io/edwards25519 v1.2.0
@@ -305,8 +305,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ==============================================================================
-github.com/pion/rtcp v1.2.19
-Source: github.com/pion/rtcp@v1.2.19/LICENSE
+github.com/pion/rtcp v1.2.20
+Source: github.com/pion/rtcp@v1.2.20/LICENSE
 ==============================================================================
 
 MIT License
@@ -320,8 +320,8 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ==============================================================================
-github.com/pion/rtp v1.10.5
-Source: github.com/pion/rtp@v1.10.5/LICENSE
+github.com/pion/rtp v1.10.6
+Source: github.com/pion/rtp@v1.10.6/LICENSE
 ==============================================================================
 
 MIT License
@@ -397,8 +397,8 @@ Redistribution and use in source and binary forms, with or without modification,
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ==============================================================================
-golang.org/x/crypto v0.57.0
-Source: golang.org/x/crypto@v0.57.0/LICENSE
+golang.org/x/crypto v0.58.0
+Source: golang.org/x/crypto@v0.58.0/LICENSE
 ==============================================================================
 
 Copyright 2009 The Go Authors.
@@ -431,7 +431,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ==============================================================================
 golang.org/x/crypto source copyright and license identifiers
-Source: golang.org/x/crypto@v0.57.0 runtime source headers
+Source: golang.org/x/crypto@v0.58.0 runtime source headers
 ==============================================================================
 
 // Copyright 2016 The Go Authors. All rights reserved.
@@ -439,7 +439,7 @@ Source: golang.org/x/crypto@v0.57.0 runtime source headers
 
 ==============================================================================
 golang.org/x/crypto patent grant
-Source: golang.org/x/crypto@v0.57.0/PATENTS
+Source: golang.org/x/crypto@v0.58.0/PATENTS
 ==============================================================================
 
 Additional IP Rights Grant (Patents)
@@ -466,8 +466,8 @@ rights granted to you under this License for this implementation of Go
 shall terminate as of the date such litigation is filed.
 
 ==============================================================================
-golang.org/x/net v0.59.0
-Source: golang.org/x/net@v0.59.0/LICENSE
+golang.org/x/net v0.61.0
+Source: golang.org/x/net@v0.61.0/LICENSE
 ==============================================================================
 
 Copyright 2009 The Go Authors.
@@ -500,7 +500,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ==============================================================================
 golang.org/x/net source copyright and license identifiers
-Source: golang.org/x/net@v0.59.0 runtime source headers
+Source: golang.org/x/net@v0.61.0 runtime source headers
 ==============================================================================
 
 // Copyright 2012 The Go Authors. All rights reserved.
@@ -513,7 +513,7 @@ Source: golang.org/x/net@v0.59.0 runtime source headers
 
 ==============================================================================
 golang.org/x/net patent grant
-Source: golang.org/x/net@v0.59.0/PATENTS
+Source: golang.org/x/net@v0.61.0/PATENTS
 ==============================================================================
 
 Additional IP Rights Grant (Patents)
@@ -540,8 +540,8 @@ rights granted to you under this License for this implementation of Go
 shall terminate as of the date such litigation is filed.
 
 ==============================================================================
-golang.org/x/sys v0.48.0
-Source: golang.org/x/sys@v0.48.0/LICENSE
+golang.org/x/sys v0.49.0
+Source: golang.org/x/sys@v0.49.0/LICENSE
 ==============================================================================
 
 Copyright 2009 The Go Authors.
@@ -574,7 +574,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ==============================================================================
 golang.org/x/sys source copyright and license identifiers
-Source: golang.org/x/sys@v0.48.0 runtime source headers
+Source: golang.org/x/sys@v0.49.0 runtime source headers
 ==============================================================================
 
 // Copyright 2009 The Go Authors. All rights reserved.
@@ -596,7 +596,7 @@ Source: golang.org/x/sys@v0.48.0 runtime source headers
 
 ==============================================================================
 golang.org/x/sys patent grant
-Source: golang.org/x/sys@v0.48.0/PATENTS
+Source: golang.org/x/sys@v0.49.0/PATENTS
 ==============================================================================
 
 Additional IP Rights Grant (Patents)
@@ -623,8 +623,8 @@ rights granted to you under this License for this implementation of Go
 shall terminate as of the date such litigation is filed.
 
 ==============================================================================
-Go 1.27.2 runtime and standard library
-Source: go1.27.2/LICENSE
+Go 1.27.3 runtime and standard library
+Source: go1.27.3/LICENSE
 ==============================================================================
 
 Copyright 2009 The Go Authors.
@@ -656,8 +656,8 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ==============================================================================
-Go 1.27.2 patent grant
-Source: go1.27.2/PATENTS
+Go 1.27.3 patent grant
+Source: go1.27.3/PATENTS
 ==============================================================================
 
 Additional IP Rights Grant (Patents)
@@ -684,8 +684,8 @@ rights granted to you under this License for this implementation of Go
 shall terminate as of the date such litigation is filed.
 
 ==============================================================================
-Go 1.27.2 bundled component: src/crypto/internal/boring/LICENSE
-Source: go1.27.2/src/crypto/internal/boring/LICENSE
+Go 1.27.3 bundled component: src/crypto/internal/boring/LICENSE
+Source: go1.27.3/src/crypto/internal/boring/LICENSE
 ==============================================================================
 
 The Go source code and supporting files in this directory
@@ -892,8 +892,8 @@ Some files from Intel carry the following license:
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ==============================================================================
-Go 1.27.2 bundled component: src/vendor/golang.org/x/crypto/LICENSE
-Source: go1.27.2/src/vendor/golang.org/x/crypto/LICENSE
+Go 1.27.3 bundled component: src/vendor/golang.org/x/crypto/LICENSE
+Source: go1.27.3/src/vendor/golang.org/x/crypto/LICENSE
 ==============================================================================
 
 Copyright 2009 The Go Authors.
@@ -925,8 +925,8 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ==============================================================================
-Go 1.27.2 bundled component: src/vendor/golang.org/x/crypto/PATENTS
-Source: go1.27.2/src/vendor/golang.org/x/crypto/PATENTS
+Go 1.27.3 bundled component: src/vendor/golang.org/x/crypto/PATENTS
+Source: go1.27.3/src/vendor/golang.org/x/crypto/PATENTS
 ==============================================================================
 
 Additional IP Rights Grant (Patents)
@@ -953,8 +953,8 @@ rights granted to you under this License for this implementation of Go
 shall terminate as of the date such litigation is filed.
 
 ==============================================================================
-Go 1.27.2 bundled component: src/vendor/golang.org/x/net/LICENSE
-Source: go1.27.2/src/vendor/golang.org/x/net/LICENSE
+Go 1.27.3 bundled component: src/vendor/golang.org/x/net/LICENSE
+Source: go1.27.3/src/vendor/golang.org/x/net/LICENSE
 ==============================================================================
 
 Copyright 2009 The Go Authors.
@@ -986,8 +986,8 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ==============================================================================
-Go 1.27.2 bundled component: src/vendor/golang.org/x/net/PATENTS
-Source: go1.27.2/src/vendor/golang.org/x/net/PATENTS
+Go 1.27.3 bundled component: src/vendor/golang.org/x/net/PATENTS
+Source: go1.27.3/src/vendor/golang.org/x/net/PATENTS
 ==============================================================================
 
 Additional IP Rights Grant (Patents)
@@ -1014,8 +1014,8 @@ rights granted to you under this License for this implementation of Go
 shall terminate as of the date such litigation is filed.
 
 ==============================================================================
-Go 1.27.2 bundled component: src/vendor/golang.org/x/sys/LICENSE
-Source: go1.27.2/src/vendor/golang.org/x/sys/LICENSE
+Go 1.27.3 bundled component: src/vendor/golang.org/x/sys/LICENSE
+Source: go1.27.3/src/vendor/golang.org/x/sys/LICENSE
 ==============================================================================
 
 Copyright 2009 The Go Authors.
@@ -1047,8 +1047,8 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ==============================================================================
-Go 1.27.2 bundled component: src/vendor/golang.org/x/sys/PATENTS
-Source: go1.27.2/src/vendor/golang.org/x/sys/PATENTS
+Go 1.27.3 bundled component: src/vendor/golang.org/x/sys/PATENTS
+Source: go1.27.3/src/vendor/golang.org/x/sys/PATENTS
 ==============================================================================
 
 Additional IP Rights Grant (Patents)
@@ -1075,8 +1075,8 @@ rights granted to you under this License for this implementation of Go
 shall terminate as of the date such litigation is filed.
 
 ==============================================================================
-Go 1.27.2 bundled component: src/vendor/golang.org/x/text/LICENSE
-Source: go1.27.2/src/vendor/golang.org/x/text/LICENSE
+Go 1.27.3 bundled component: src/vendor/golang.org/x/text/LICENSE
+Source: go1.27.3/src/vendor/golang.org/x/text/LICENSE
 ==============================================================================
 
 Copyright 2009 The Go Authors.
@@ -1108,8 +1108,8 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ==============================================================================
-Go 1.27.2 bundled component: src/vendor/golang.org/x/text/PATENTS
-Source: go1.27.2/src/vendor/golang.org/x/text/PATENTS
+Go 1.27.3 bundled component: src/vendor/golang.org/x/text/PATENTS
+Source: go1.27.3/src/vendor/golang.org/x/text/PATENTS
 ==============================================================================
 
 Additional IP Rights Grant (Patents)
@@ -1137,7 +1137,7 @@ shall terminate as of the date such litigation is filed.
 
 ==============================================================================
 Go amd64 memmove: Inferno-derived code
-Source: go1.27.2/src/runtime/memmove_amd64.s
+Source: go1.27.3/src/runtime/memmove_amd64.s
 ==============================================================================
 
 // Derived from Inferno's libkern/memmove-386.s (adapted for amd64)
@@ -1167,7 +1167,7 @@ Source: go1.27.2/src/runtime/memmove_amd64.s
 
 ==============================================================================
 Go edwards25519: fiat-crypto generated code
-Source: go1.27.2/src/crypto/internal/fips140/edwards25519/scalar.go
+Source: go1.27.3/src/crypto/internal/fips140/edwards25519/scalar.go
 ==============================================================================
 
 //     Copyright (c) 2015-2020 The fiat-crypto Authors. All rights reserved.
@@ -1193,7 +1193,7 @@ Source: go1.27.2/src/crypto/internal/fips140/edwards25519/scalar.go
 
 ==============================================================================
 Go P-256 inversion: fiat-crypto generated code
-Source: go1.27.2/src/crypto/internal/fips140/nistec/p256_ordinv.go
+Source: go1.27.3/src/crypto/internal/fips140/nistec/p256_ordinv.go
 ==============================================================================
 
 //	 Copyright (c) 2015-2020 the fiat-crypto authors (see the AUTHORS file)
@@ -1220,7 +1220,7 @@ Source: go1.27.2/src/crypto/internal/fips140/nistec/p256_ordinv.go
 
 ==============================================================================
 Go math: Sun fdlibm notice
-Source: go1.27.2/src/math/acosh.go
+Source: go1.27.3/src/math/acosh.go
 ==============================================================================
 
 // Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
@@ -1232,7 +1232,7 @@ Source: go1.27.2/src/math/acosh.go
 
 ==============================================================================
 Go math: Sun fdlibm notice
-Source: go1.27.2/src/math/exp.go
+Source: go1.27.3/src/math/exp.go
 ==============================================================================
 
 // Copyright (C) 2004 by Sun Microsystems, Inc. All rights reserved.
@@ -1243,7 +1243,7 @@ Source: go1.27.2/src/math/exp.go
 
 ==============================================================================
 Go math: Cephes notice
-Source: go1.27.2/src/math/atan.go
+Source: go1.27.3/src/math/atan.go
 ==============================================================================
 
 // Cephes Math Library Release 2.8:  June, 2000
@@ -1274,7 +1274,7 @@ Source: github.com/pion/logging@v0.2.4 runtime source headers
 
 ==============================================================================
 github.com/pion/rtcp source copyright and license identifiers
-Source: github.com/pion/rtcp@v1.2.19 runtime source headers
+Source: github.com/pion/rtcp@v1.2.20 runtime source headers
 ==============================================================================
 
 // SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
@@ -1282,7 +1282,7 @@ Source: github.com/pion/rtcp@v1.2.19 runtime source headers
 
 ==============================================================================
 github.com/pion/rtp source copyright and license identifiers
-Source: github.com/pion/rtp@v1.10.5 runtime source headers
+Source: github.com/pion/rtp@v1.10.6 runtime source headers
 ==============================================================================
 
 // SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
