@@ -1,6 +1,6 @@
 # Development
 
-Use Go **1.27.2**, as declared in [go.mod](../go.mod). Routing tests need Python 3.12+ and a POSIX shell on Linux or WSL. The [CI workflow](../.github/workflows/ci.yml) runs the Go checks and local routing tests without physical devices.
+Use Go **1.27.3**, as declared in [go.mod](../go.mod). Routing tests need Python 3.12+ and a POSIX shell on Linux or WSL; CI uses Python 3.15. The [CI workflow](../.github/workflows/ci.yml) runs the Go checks and local routing tests without physical devices.
 
 ## Verify changes
 

@@ -1,6 +1,6 @@
 # Getting started
 
-Start with one camera and a spare NVR channel. You need a reachable camera with local RTSP and a supported [event adapter](configuration.md#source-adapters), an allocated virtual camera IP, and either Go **1.27.2** or Docker with Compose. The service does not assign IP addresses.
+Start with one camera and a spare NVR channel. You need a reachable camera with local RTSP and a supported [event adapter](configuration.md#source-adapters), an allocated virtual camera IP, and either Go **1.27.3** or Docker with Compose. The service does not assign IP addresses.
 
 ## What has been tested
 

@@ -43,7 +43,7 @@ MIT license does not replace those terms.
 - [Third-party notices](../THIRD_PARTY_NOTICES) collect the upstream license
   texts and additional source attributions for the runtime Go dependencies and
   Go runtime/standard library. The inventory covers static Linux amd64/arm64
-  and Windows amd64 builds with Go 1.27.2; recheck it when dependencies, build
+  and Windows amd64 builds with Go 1.27.3; recheck it when dependencies, build
   targets, or the toolchain change.
 - [SPAKE2+ interoperability notices](../internal/spakeee/NOTICE) retain the
   attribution and BSD 2-Clause terms for Frank Denis's `spake2-ee` work, and
