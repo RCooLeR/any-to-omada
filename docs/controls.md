@@ -69,8 +69,12 @@ A lost connection or power interruption can prevent light restoration or PTZ Sto
 
 Physical controls are separate from [simulated camera settings](events.md#virtual-detection-settings). The source-side ONVIF PTZ backend includes presets, but its Omada-side preset response remains unsupported pending a verified native contract.
 
+Version 0.3.1 separates native `get ptz.capability` from the recorder UI's `ptz.get_ptz_capability` response. Native capability reads advertise continuous pan/tilt only when source discovery confirms it. Presets, zoom, absolute moves and relative moves are not advertised. The movement and capability field names agree with TP-Link's [official camera emulator](https://emulator.tp-link.com/vigi-ipc/admin/Index.htm) and shipped camera UI; the emulator is a static protocol reference, not evidence of physical NVR interoperability. A fixed native Omada camera also returned `-40106` for both ID-based and index-based `preset.get_preset` requests, matching the translator's retained rejection.
+
+For an explicitly scoped pan/tilt trial, configure only the selected camera's `ptz` block, use `max_move_seconds: 2`, and set `compatibility.ptz_module_spec_keys` to `["ptz"]`. This advertises pan/tilt without the experimental motor or preset keys. Keep the other cameras' PTZ blocks absent. After operator activation, check recorder stability and the selected channel's controls before a short directional press and release. Confirm that movement stops on release. Successful ONVIF discovery or software tests alone do not establish this result.
+
 The previous preset reply did not match the camera UI's nested structure, and recorder sessions failed during preset negotiation. The exact recorder failure trigger has not been isolated; a different guessed success shape is not a verified fix.
 
-The last confirmed recovery runtime, 0.2.27, was stable with video after PTZ advertisements were disabled. Keep control advertisements disabled for ordinary deployments and validate opt-ins on a spare channel before daily recording. See the [recorded PTZ evidence](omada-protocol.md#84-recorder-resets-during-ptz-negotiation-2026-10-17).
+The last confirmed recovery runtime, 0.2.27, was stable with video after PTZ advertisements were disabled. Keep control advertisements disabled for ordinary deployments and validate opt-ins on a spare channel before daily recording. Even a one-channel trial can affect the recorder; stop the translator if the recorder's System error returns. See the [recorded PTZ evidence](omada-protocol.md#84-recorder-resets-during-ptz-negotiation-2026-10-17).
 
 [Operation and troubleshooting](operations.md) · [Documentation index](../README.md)

@@ -17,10 +17,11 @@ import (
 // fakePTZ records control requests without moving hardware and provides
 // configurable source capabilities and preset data.
 type fakePTZ struct {
-	mu      sync.Mutex
-	calls   []string
-	presets []PTZPreset
-	fail    bool
+	mu         sync.Mutex
+	calls      []string
+	presets    []PTZPreset
+	fail       bool
+	capability *PTZCapability
 }
 
 // record appends one control trace under the call-list mutex.
@@ -43,6 +44,9 @@ func (f *fakePTZ) taken() []string {
 func (f *fakePTZ) Capability(context.Context) (PTZCapability, error) {
 	if f.fail {
 		return PTZCapability{}, errors.New("unavailable")
+	}
+	if f.capability != nil {
+		return *f.capability, nil
 	}
 	return PTZCapability{PanTilt: true, Zoom: true, MaxPresets: 8}, nil
 }
@@ -137,18 +141,104 @@ func TestPTZCapabilityAndModuleSpecCandidates(t *testing.T) {
 		t.Fatalf("module_spec lacks candidate keys: %v", spec)
 	}
 	capability := value["ptz"].(map[string]any)["capability"].(map[string]any)
-	if capability["zoom_supported"] != "1" || capability["preset_supported"] != "1" || capability["preset_number_max"] != "8" ||
+	if capability["continuous_move_supported"] != "1" || capability["zoom_supported"] != "0" || capability["preset_supported"] != "0" || capability["preset_number_max"] != "0" ||
 		capability["focus_supported"] != "0" || capability["tour_supported"] != "0" {
-		t.Fatalf("capability: %v", capability)
+		t.Fatalf("native capability: %v", capability)
 	}
 	value = passthroughValue(t, s, `{"method":"do","ptz":{"get_ptz_capability":{"chn_id":3}}}`)
-	if value["ptz_capability"].(map[string]any)["zoom_supported"] != "1" {
+	capability = value["ptz_capability"].(map[string]any)
+	if capability["zoom_supported"] != "1" || capability["preset_supported"] != "1" || capability["preset_number_max"] != "8" || capability["continuous_move_supported"] != nil {
 		t.Fatalf("get_ptz_capability: %v", value)
 	}
 
 	ptz.fail = true
 	if value := passthroughValue(t, s, `{"method":"do","ptz":{"get_ptz_capability":{}}}`); value["error_code"] != float64(unsupportedCode) {
 		t.Fatal("unavailable source reported PTZ capability")
+	}
+}
+
+func TestNativePTZCapabilityDoesNotClaimUnverifiedControls(t *testing.T) {
+	for _, transport := range []string{"https", "callback"} {
+		for _, source := range []struct {
+			name    string
+			panTilt bool
+			fail    bool
+		}{
+			{name: "pan_tilt", panTilt: true},
+			{name: "zoom_only"},
+			{name: "discovery_failure", panTilt: true, fail: true},
+		} {
+			t.Run(transport+"/"+source.name, func(t *testing.T) {
+				ptz := &fakePTZ{capability: &PTZCapability{PanTilt: source.panTilt, Zoom: true, MaxPresets: 8, Home: true}, fail: source.fail}
+				s := testServer(t, func(cfg *Config) { cfg.PTZ = ptz })
+				body := `{"method":"get","ptz":{"name":"capability"}}`
+				var value map[string]any
+				if transport == "callback" {
+					value = passthroughValue(t, s, body)
+				} else {
+					var status int
+					status, value = request(t, s, login(t, s), body)
+					if status != http.StatusOK {
+						t.Fatalf("authenticated request returned HTTP %d", status)
+					}
+				}
+				if source.fail {
+					if !reflect.DeepEqual(value, map[string]any{"error_code": float64(unsupportedCode)}) {
+						t.Fatalf("unavailable source reported native PTZ capability: %v", value)
+					}
+					return
+				}
+				capability := value["ptz"].(map[string]any)["capability"].(map[string]any)
+				continuousMove := "0"
+				if source.panTilt {
+					continuousMove = "1"
+				}
+				if value["error_code"] != float64(0) || capability["continuous_move_supported"] != continuousMove ||
+					capability["zoom_supported"] != "0" || capability["preset_supported"] != "0" || capability["preset_number_max"] != "0" ||
+					capability["absolute_move_supported"] != "0" || capability["relative_move_supported"] != "0" {
+					t.Fatalf("native capability overclaimed source controls: %v", value)
+				}
+				for _, name := range []string{"position_pan_range", "position_tilt_range", "position_zoom_range", "home_position_mode", "status"} {
+					if _, found := capability[name]; found {
+						t.Fatalf("native capability invented %s: %v", name, capability)
+					}
+				}
+				if len(ptz.taken()) != 0 {
+					t.Fatal("capability read issued a physical control")
+				}
+			})
+		}
+	}
+}
+
+func TestNativeContinuousMoveAndStopBodiesReachSource(t *testing.T) {
+	for _, transport := range []string{"https", "callback"} {
+		t.Run(transport, func(t *testing.T) {
+			ptz := &fakePTZ{}
+			s := testServer(t, func(cfg *Config) { cfg.PTZ = ptz })
+			path := login(t, s)
+			for _, command := range []struct {
+				body string
+				call string
+			}{
+				{`{"method":"do","ptz":{"continuous_move":{"velocity_pan":"0.571429","velocity_tilt":"-0.571429"}}}`, "move 0.57 -0.57 0.00"},
+				{`{"method":"do","ptz":{"stop":{"pan":"1","tilt":"1","zoom":"1"}}}`, "stop"},
+			} {
+				var value map[string]any
+				if transport == "callback" {
+					value = passthroughValue(t, s, command.body)
+				} else {
+					var status int
+					status, value = request(t, s, path, command.body)
+					if status != http.StatusOK {
+						t.Fatalf("authenticated request returned HTTP %d", status)
+					}
+				}
+				if calls := ptz.taken(); !reflect.DeepEqual(value, map[string]any{"error_code": float64(0)}) || !reflect.DeepEqual(calls, []string{command.call}) {
+					t.Fatalf("native command response %v, calls %v", value, calls)
+				}
+			}
+		})
 	}
 }
 

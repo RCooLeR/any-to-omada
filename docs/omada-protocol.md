@@ -666,9 +666,21 @@ Release 0.2.27 rejects native
 reply with another guessed schema. The operator subsequently confirmed that
 0.2.27 was stable with video when PTZ blocks and their module advertisement
 keys were removed. This establishes the recovery configuration, not the exact
-faulting response or successful PTZ interoperability. A captured real native
-PTZ reply and complete contract verification are required before reenabling
-those advertisements.
+faulting response or successful PTZ interoperability. Successful native PTZ
+interoperability remains unverified; do not restore the former preset
+advertisements or success response based on this recovery alone.
+
+The 0.3.1 pan/tilt-only trial separates native `get ptz.capability` from the
+recorder UI API. The native response includes `continuous_move_supported`
+from source discovery and disables preset, zoom, absolute and relative move
+advertisements. Field names, string types and native movement/Stop request
+shapes are supported by TP-Link's [official camera emulator](https://emulator.tp-link.com/vigi-ipc/admin/Index.htm)
+and shipped camera UI. The emulator supplies static fixtures, not captured
+hardware responses. A read-only request forwarded through the NVR to a real
+fixed Omada camera returned `-40106` for both native preset query forms;
+the translator retains that rejection. This supports a scoped operator
+experiment, not a claim of verified NVR PTZ support. Position ranges, status
+and successful native preset replies remain unimplemented rather than inferred.
 
 ## 9. How any-to-omada implements it
 
