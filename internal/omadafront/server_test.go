@@ -234,6 +234,36 @@ func TestSessionBoundDoesNotEvictExistingClient(t *testing.T) {
 	}
 }
 
+func TestLoginRecoversAfterRepeatedSessionExpiry(t *testing.T) {
+	s := testServer(t, func(cfg *Config) { cfg.MaxSessions = 1 })
+	clock := time.Date(2026, time.October, 27, 12, 0, 0, 0, time.UTC)
+	s.now = func() time.Time { return clock }
+	path := login(t, s)
+	for range 3 {
+		clock = clock.Add(15 * time.Minute)
+		status, _ := request(t, s, path, `{"method":"get","network":{"name":"wan_status"}}`)
+		if status != http.StatusUnauthorized {
+			t.Fatal("expired session was accepted")
+		}
+		previousPath := path
+		path = login(t, s)
+		if path == previousPath {
+			t.Fatal("re-login reused the expired token")
+		}
+		status, _ = request(t, s, path, `{"method":"get","network":{"name":"wan_status"}}`)
+		if status != http.StatusOK || s.Status().Sessions != 1 {
+			t.Fatal("re-login did not restore authorized reads")
+		}
+		status, _ = request(t, s, previousPath, `{"method":"get","network":{"name":"wan_status"}}`)
+		if status != http.StatusUnauthorized {
+			t.Fatal("re-login revived an expired session")
+		}
+	}
+	if s.Status().LoginSuccesses != 4 || s.Status().LoginFailures != 0 {
+		t.Fatal("session expiry was misclassified as a rejected login")
+	}
+}
+
 func TestNoFalseSuccessForNativeCallbackOrWrites(t *testing.T) {
 	s := testServer(t, nil)
 	path := login(t, s)

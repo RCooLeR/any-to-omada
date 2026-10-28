@@ -134,3 +134,40 @@ func TestApplicationAccountFailureBoundAndFraming(t *testing.T) {
 		t.Fatal("missing account accepted")
 	}
 }
+
+func TestApplicationChallengeAnswersAreSingleUseAndConnectionScoped(t *testing.T) {
+	credentials, _ := NewApplicationCredentials("fixture-user", "synthetic-password")
+	auth, _ := NewApplicationAuth(credentials)
+	auth.random = bytes.NewReader(append([]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}, bytes.Repeat([]byte{42}, 32)...))
+	if _, err := auth.Challenge(1); err != nil {
+		t.Fatal(err)
+	}
+	valid := []byte(`{"username":"fixture-user","realm":"vigi","nonce":"000102030405060708090a0b0c0d0e0f","uri":"tplink","qop":"auth","nc":"1","cnonce":"synthetic-client-nonce","response":"3192594a9770e61ee387efee62fbb61d"}`)
+	if _, accepted, err := auth.Authenticate(2, valid); err != nil || !accepted {
+		t.Fatal("valid challenge answer rejected")
+	}
+	if _, accepted, err := auth.Authenticate(3, valid); err != nil || accepted || auth.Authenticated() {
+		t.Fatal("consumed challenge answer accepted again")
+	}
+	other, _ := NewApplicationAuth(credentials)
+	other.random = bytes.NewReader(bytes.Repeat([]byte{43}, 32))
+	if _, err := other.Challenge(1); err != nil {
+		t.Fatal(err)
+	}
+	if _, accepted, err := other.Authenticate(2, valid); err != nil || accepted || other.Authenticated() {
+		t.Fatal("challenge answer accepted on a different connection")
+	}
+}
+
+func TestApplicationPendingChallengesAreBounded(t *testing.T) {
+	credentials, _ := NewApplicationCredentials("fixture-user", "synthetic-password")
+	auth, _ := NewApplicationAuth(credentials)
+	for i := range maxPendingApplicationChallenges {
+		if _, err := auth.Challenge(uint16(i + 1)); err != nil {
+			t.Fatal("pending challenge rejected below the limit")
+		}
+	}
+	if _, err := auth.Challenge(maxPendingApplicationChallenges + 1); err == nil || len(auth.challenges) != maxPendingApplicationChallenges || auth.Authenticated() {
+		t.Fatal("pending challenge bound was not enforced")
+	}
+}

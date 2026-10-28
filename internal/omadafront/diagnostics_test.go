@@ -80,7 +80,7 @@ func TestRequestDiagnosticsRecordEnrollmentSequenceWithoutPrivateFields(t *testi
 	if len(lines) != len(expected) {
 		t.Fatal("request diagnostics did not emit exactly one entry per request")
 	}
-	allowedFields := map[string]bool{"time": true, "level": true, "msg": true, "camera_id": true, "operation": true, "auth_outcome": true, "http_status": true, "error_code": true, "path_kind": true, "discovery_shape": true, "request_shape": true}
+	allowedFields := map[string]bool{"time": true, "level": true, "msg": true, "camera_id": true, "operation": true, "auth_outcome": true, "auth_failure_reason": true, "http_status": true, "error_code": true, "path_kind": true, "discovery_shape": true, "request_shape": true}
 	for i, line := range lines {
 		var fields map[string]any
 		if err := json.Unmarshal(line, &fields); err != nil {
@@ -94,6 +94,13 @@ func TestRequestDiagnosticsRecordEnrollmentSequenceWithoutPrivateFields(t *testi
 		want := expected[i]
 		if fields["operation"] != want.operation || fields["auth_outcome"] != want.auth || fields["http_status"] != float64(want.status) || fields["error_code"] != float64(want.code) || fields["camera_id"] != "fixture-camera" || fields["msg"] != "camera management request" {
 			t.Fatalf("request diagnostic sequence mismatch at entry %d", i)
+		}
+		if want.auth == "rejected" {
+			if fields["auth_failure_reason"] != "password_proof_mismatch" {
+				t.Fatal("rejected login did not classify the failed proof")
+			}
+		} else if _, exists := fields["auth_failure_reason"]; exists {
+			t.Fatal("failure reason was emitted without a rejected login")
 		}
 	}
 	if s.Status().Unsupported["nvr_long_connect"] != 1 || s.Status().NativeEventsImplemented {
@@ -126,6 +133,47 @@ func TestRequestDiagnosticsClassifyDiscoveryWithoutLoggingPaths(t *testing.T) {
 			}
 			if strings.Contains(output.String(), "private-") || strings.Contains(output.String(), "stok") {
 				t.Fatal("request diagnostics leaked a path, field or value")
+			}
+		})
+	}
+}
+
+func TestLoginDiagnosticsClassifyFailuresWithoutPrivateValues(t *testing.T) {
+	for _, tc := range []struct {
+		name, login, reason string
+	}{
+		{"wrong field type", `{"username":["private-user"],"password":"private-proof"}`, "malformed_request"},
+		{"wrong login shape", `["private-body"]`, "malformed_request"},
+		{"invalid username encoding", `{"username":"private-user%","password":"private-proof","passwdType":"md5"}`, "invalid_username_encoding"},
+		{"unsupported password type", `{"username":"fixture-operator","password":"private-proof","passwdType":"private-type"}`, "unsupported_password_type"},
+		{"missing password type", `{"username":"fixture-operator","password":"private-proof"}`, "unsupported_password_type"},
+		{"null login", `null`, "unsupported_password_type"},
+		{"unsupported encryption type", `{"username":"fixture-operator","password":"private-proof","passwdType":"md5","encrypt_type":"private-encryption"}`, "unsupported_encryption_type"},
+		{"wrong username", `{"username":"private-user","password":"private-proof","passwdType":"md5"}`, "username_mismatch"},
+		{"wrong password proof", `{"username":"fixture-operator","password":"private-proof","passwdType":"md5"}`, "password_proof_mismatch"},
+		{"lowercase password proof", `{"username":"fixture-operator","password":"48a884bed8d6c46e9dc303655c804b0a","passwdType":"md5"}`, "password_proof_mismatch"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var output bytes.Buffer
+			s := testServer(t, func(cfg *Config) { cfg.Logger = slog.New(slog.NewJSONHandler(&output, nil)) })
+			status, response := request(t, s, "/", `{"method":"do","login":`+tc.login+`}`)
+			if status != http.StatusUnauthorized || response["error_code"] != float64(unauthorizedCode) || response["stok"] != nil {
+				t.Fatal("failure classification changed the rejected-login response")
+			}
+			if s.Status().LoginFailures != 1 || s.Status().LoginSuccesses != 0 || s.Status().Sessions != 0 {
+				t.Fatal("failure classification changed session or login accounting")
+			}
+			var fields map[string]any
+			if err := json.Unmarshal(output.Bytes(), &fields); err != nil {
+				t.Fatal(err)
+			}
+			if fields["operation"] != "login" || fields["auth_outcome"] != "rejected" || fields["auth_failure_reason"] != tc.reason {
+				t.Fatal("login did not emit the expected fixed failure label")
+			}
+			for _, private := range []string{"private-", "fixture-operator", "synthetic-camera-password", "48a884bed8d6c46e9dc303655c804b0a", tc.login, "nonce", "stok"} {
+				if strings.Contains(output.String(), private) {
+					t.Fatal("login diagnostics exposed a credential, body or challenge")
+				}
 			}
 		})
 	}

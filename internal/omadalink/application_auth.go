@@ -12,7 +12,10 @@ import (
 	"strings"
 )
 
-const applicationAuthAttempts = 5
+const (
+	applicationAuthAttempts         = 5
+	maxPendingApplicationChallenges = 32
+)
 
 // ApplicationCredentials holds a derived account verifier, not the plaintext
 // password or the unrelated callback registration auth_code. It is immutable.
@@ -36,7 +39,7 @@ func NewApplicationCredentials(username, password string) (*ApplicationCredentia
 type ApplicationAuth struct {
 	credentials   *ApplicationCredentials
 	random        io.Reader
-	nonce         string
+	challenges    map[string]string // Decimal nonce count -> unused server nonce.
 	nonceCount    uint32
 	failures      int
 	authenticated bool
@@ -48,7 +51,7 @@ func NewApplicationAuth(credentials *ApplicationCredentials) (*ApplicationAuth, 
 	if credentials == nil || credentials.username == "" || len(credentials.ha1) != 32 {
 		return nil, errors.New("native callback account is not configured")
 	}
-	return &ApplicationAuth{credentials: credentials, random: rand.Reader}, nil
+	return &ApplicationAuth{credentials: credentials, random: rand.Reader, challenges: make(map[string]string)}, nil
 }
 
 // Authenticated reports account-proof verification, distinct from PAKE/TLS.
@@ -60,18 +63,24 @@ func (a *ApplicationAuth) Challenge(id uint16) ([]byte, error) {
 	return a.challenge(id, -40401)
 }
 
-// challenge rotates the connection nonce and increments its count while keeping
-// the remaining-attempt budget separate from the protocol response code.
+// challenge retains each outstanding nonce until its answer arrives. The NVR
+// can pipeline unauthenticated requests, so a later challenge must not invalidate
+// an earlier one. Counts and the remaining-attempt budget are separate.
 func (a *ApplicationAuth) challenge(id uint16, code int) ([]byte, error) {
 	if a.failures >= applicationAuthAttempts {
 		return nil, errors.New("native callback account attempts exhausted")
+	}
+	if len(a.challenges) >= maxPendingApplicationChallenges {
+		return nil, errors.New("native callback pending challenge limit reached")
 	}
 	var nonce [16]byte
 	if _, err := io.ReadFull(a.random, nonce[:]); err != nil {
 		return nil, errors.New("native callback challenge generation failed")
 	}
-	a.nonce = hex.EncodeToString(nonce[:])
 	a.nonceCount++
+	count := strconv.FormatUint(uint64(a.nonceCount), 10)
+	serverNonce := hex.EncodeToString(nonce[:])
+	a.challenges[count] = serverNonce
 	return encodeAccountResponse(id, code, struct {
 		Realm     string `json:"realm"`
 		Algorithm string `json:"algorithm"`
@@ -81,7 +90,7 @@ func (a *ApplicationAuth) challenge(id uint16, code int) ([]byte, error) {
 		URI       string `json:"uri"`
 		Time      int    `json:"time"`
 		MaxTime   int    `json:"max_time"`
-	}{"vigi", "digestmd5", "auth", a.nonce, strconv.FormatUint(uint64(a.nonceCount), 10), "tplink", applicationAuthAttempts - a.failures, applicationAuthAttempts})
+	}{"vigi", "digestmd5", "auth", serverNonce, count, "tplink", applicationAuthAttempts - a.failures, applicationAuthAttempts})
 }
 
 // Authenticate verifies the captured object-shaped Auth request and returns a
@@ -100,20 +109,22 @@ func (a *ApplicationAuth) Authenticate(id uint16, request json.RawMessage) ([]by
 		Algorithm string `json:"algorithm"`
 	}
 	valid := len(request) <= MaxApplicationFrameSize && json.Unmarshal(request, &proof) == nil
-	valid = valid && !a.authenticated && a.nonce != "" && proof.Realm == "vigi" && proof.URI == "tplink" && proof.QOP == "auth" &&
-		(proof.Algorithm == "" || proof.Algorithm == "digestmd5") && proof.NC == strconv.FormatUint(uint64(a.nonceCount), 10) &&
+	nonce, pending := a.challenges[proof.NC]
+	valid = valid && pending && proof.Realm == "vigi" && proof.URI == "tplink" && proof.QOP == "auth" &&
+		(proof.Algorithm == "" || proof.Algorithm == "digestmd5") &&
 		len(proof.CNonce) > 0 && len(proof.CNonce) <= 128 && !strings.ContainsRune(proof.CNonce, 0)
 	valid = valid && subtle.ConstantTimeCompare([]byte(proof.Username), []byte(a.credentials.username)) == 1 &&
-		subtle.ConstantTimeCompare([]byte(proof.Nonce), []byte(a.nonce)) == 1 &&
-		subtle.ConstantTimeCompare([]byte(proof.Response), []byte(applicationDigest(a.credentials.ha1, a.nonce, proof.NC))) == 1
+		subtle.ConstantTimeCompare([]byte(proof.Nonce), []byte(nonce)) == 1 &&
+		subtle.ConstantTimeCompare([]byte(proof.Response), []byte(applicationDigest(a.credentials.ha1, nonce, proof.NC))) == 1
 	if !valid {
 		a.authenticated = false
+		clear(a.challenges)
 		a.failures++
 		frame, err := a.challenge(id, -40407)
 		return frame, false, err
 	}
 	a.authenticated = true
-	a.nonce = "" // A proof belongs to one challenge on one callback connection.
+	delete(a.challenges, proof.NC) // Each issued challenge is single-use and connection-local.
 	frame, err := encodeAccountResponse(id, 0, struct {
 		Username string `json:"username"`
 		Realm    string `json:"realm"`

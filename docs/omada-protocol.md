@@ -368,6 +368,13 @@ The camera answers the recorder's first `Request` with an account challenge:
 {"responseData":{"time":5,"max_time":5,"realm":"vigi","algorithm":"digestmd5","qop":"auth","nonce":"<hex>","nc":"1","uri":"tplink"},"id":1,"error_code":-40401}
 ```
 
+The recorder can send multiple `Request` frames before answering their
+challenges. The translator retains up to 32 outstanding challenges per callback
+connection and consumes each nonce/count pair once, accepting answers in either
+order. A successful answer must not invalidate another outstanding challenge.
+An invalid answer clears the pending challenges and uses the existing bounded
+retry budget. Challenges never carry over to a new connection.
+
 The recorder replies with an `Auth` frame holding `algorithm "digestmd5"`,
 `cnonce`, `max_time`, `nc`, `nonce`, `qop "auth"`, `realm "vigi"`, `response`,
 `time`, `uri "tplink"`, `username`, then repeats its request. The camera
