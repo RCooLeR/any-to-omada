@@ -5,7 +5,7 @@ go 1.27.3
 require (
 	filippo.io/edwards25519 v1.2.0
 	github.com/bluenviron/gortsplib/v5 v5.6.7
-	github.com/bluenviron/mediacommon/v2 v2.9.6
+	github.com/bluenviron/mediacommon/v2 v2.9.7
 	github.com/dchest/blake2b v1.0.0
 	github.com/pion/rtp v1.10.6
 	golang.org/x/crypto v0.58.0
