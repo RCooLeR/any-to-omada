@@ -184,6 +184,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			fields := []any{"operation", diagnostic.operation, "auth_outcome", diagnostic.authOutcome,
 				"http_status", diagnostic.httpStatus, "error_code", diagnostic.errorCode,
 				"path_kind", diagnostic.pathKind, "discovery_shape", diagnostic.discoveryShape}
+			if diagnostic.authFailureReason != "" {
+				fields = append(fields, "auth_failure_reason", diagnostic.authFailureReason)
+			}
 			if diagnostic.operation == "unsupported_read" {
 				fields = append(fields, "read_modules", diagnostic.readModules,
 					"read_selectors", diagnostic.readSelectors, "read_selector_forms", diagnostic.readSelectorForms,
@@ -262,7 +265,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.URL.Path == "/" && method == "do" && len(request) == 2 {
 		if raw, ok := request["login"]; ok {
-			diagnostic.authOutcome = s.login(w, raw)
+			diagnostic.authOutcome, diagnostic.authFailureReason = s.login(w, raw)
 			return
 		}
 		if raw, ok := request["user_management"]; ok && encryptInfoRequest(raw) {
@@ -336,8 +339,9 @@ func (s *Server) challenge(w http.ResponseWriter) {
 }
 
 // login verifies the legacy proof, allocates a bounded expiring session and
-// writes the response; its returned label describes proof acceptance only.
-func (s *Server) login(w http.ResponseWriter, raw json.RawMessage) string {
+// writes the response. Returned labels describe proof acceptance and the first
+// failed check; they never contain values supplied by the client.
+func (s *Server) login(w http.ResponseWriter, raw json.RawMessage) (string, string) {
 	var login struct {
 		Username     string `json:"username"`
 		Password     string `json:"password"`
@@ -346,20 +350,32 @@ func (s *Server) login(w http.ResponseWriter, raw json.RawMessage) string {
 	}
 	err := json.Unmarshal(raw, &login)
 	username, decodeErr := url.PathUnescape(login.Username)
-	valid := err == nil && decodeErr == nil && login.PasswordType == "md5" && (login.EncryptType == "" || login.EncryptType == "1") &&
-		subtle.ConstantTimeCompare([]byte(username), []byte(s.username)) == 1 &&
-		subtle.ConstantTimeCompare([]byte(login.Password), []byte(s.passwordHash)) == 1
-	if !valid {
+	var failureReason string
+	switch {
+	case err != nil:
+		failureReason = "malformed_request"
+	case decodeErr != nil:
+		failureReason = "invalid_username_encoding"
+	case login.PasswordType != "md5":
+		failureReason = "unsupported_password_type"
+	case login.EncryptType != "" && login.EncryptType != "1":
+		failureReason = "unsupported_encryption_type"
+	case subtle.ConstantTimeCompare([]byte(username), []byte(s.username)) != 1:
+		failureReason = "username_mismatch"
+	case subtle.ConstantTimeCompare([]byte(login.Password), []byte(s.passwordHash)) != 1:
+		failureReason = "password_proof_mismatch"
+	}
+	if failureReason != "" {
 		s.mu.Lock()
 		s.status.LoginFailures++
 		s.mu.Unlock()
 		s.challenge(w)
-		return "rejected"
+		return "rejected", failureReason
 	}
 	var random [sessionBytes]byte
 	if _, err := rand.Read(random[:]); err != nil {
 		s.write(w, http.StatusServiceUnavailable, map[string]any{"error_code": unsupportedCode})
-		return "accepted"
+		return "accepted", ""
 	}
 	token := hex.EncodeToString(random[:])
 	now := s.now()
@@ -368,13 +384,13 @@ func (s *Server) login(w http.ResponseWriter, raw json.RawMessage) string {
 	if len(s.sessions) >= s.maxSessions {
 		s.mu.Unlock()
 		s.write(w, http.StatusServiceUnavailable, map[string]any{"error_code": unsupportedCode})
-		return "accepted"
+		return "accepted", ""
 	}
 	s.sessions[token] = now.Add(s.ttl)
 	s.status.LoginSuccesses++
 	s.mu.Unlock()
 	s.write(w, http.StatusOK, map[string]any{"user_group": "root", "stok": token, "error_code": 0})
-	return "accepted"
+	return "accepted", ""
 }
 
 // authorized checks an exact session URL and removes expired sessions without
@@ -537,6 +553,7 @@ type requestDiagnostic struct {
 	http.ResponseWriter
 	operation          string
 	authOutcome        string
+	authFailureReason  string
 	httpStatus         int
 	errorCode          int
 	pathKind           string
