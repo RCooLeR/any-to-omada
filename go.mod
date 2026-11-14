@@ -8,8 +8,8 @@ require (
 	github.com/bluenviron/mediacommon/v2 v2.9.7
 	github.com/dchest/blake2b v1.0.0
 	github.com/pion/rtp v1.10.6
-	golang.org/x/crypto v0.58.0
-	golang.org/x/sys v0.49.0
+	golang.org/x/crypto v0.59.0
+	golang.org/x/sys v0.50.0
 )
 
 require (
