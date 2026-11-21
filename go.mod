@@ -4,8 +4,8 @@ go 1.27.4
 
 require (
 	filippo.io/edwards25519 v1.2.0
-	github.com/bluenviron/gortsplib/v5 v5.6.7
-	github.com/bluenviron/mediacommon/v2 v2.9.7
+	github.com/bluenviron/gortsplib/v5 v5.7.0
+	github.com/bluenviron/mediacommon/v2 v2.10.0
 	github.com/dchest/blake2b v1.0.0
 	github.com/pion/rtp v1.10.6
 	golang.org/x/crypto v0.59.0
